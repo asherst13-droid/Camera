@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тест Камеры</title>
+    <style>
+        body { margin: 0; padding: 0; overflow: hidden; background-color: #000; }
+        #videoElement { width: 100vw; height: 100vh; object-fit: contain; display: none; }
+        #status { position: absolute; top: 10px; left: 10px; color: white; font-family: Arial, sans-serif; z-index: 10; }
+        #startButton { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 15px 30px; font-size: 18px; cursor: pointer; z-index: 20; }
+    </style>
+</head>
+<body>
+    <div id="status">Ожидание запуска камеры...</div>
+    <button id="startButton">Запустить Камеру</button>
+    <video id="videoElement" autoplay playsinline></video>
+
+    <script>
+        const video = document.getElementById('videoElement');
+        const startButton = document.getElementById('startButton');
+        const status = document.getElementById('status');
+
+        async function startCamera() {
+            try {
+                status.textContent = 'Запрашиваем доступ к камере...';
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                video.srcObject = stream;
+                await video.play(); // Убедиться, что воспроизведение началось
+                
+                status.textContent = 'Видео активно!';
+                startButton.style.display = 'none'; // Скрыть кнопку
+                video.style.display = 'block'; // Показать видео
+            } catch (err) {
+                console.error("Ошибка доступа к камере:", err);
+                status.textContent = `Ошибка: ${err.message || 'Неизвестная ошибка'}`;
+            }
+        }
+
+        startButton.onclick = startCamera;
+    </script>
+</body>
+</html>
