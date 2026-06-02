@@ -1,253 +1,278 @@
+
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Стример 2-бит Red Only</title>
-<style>
-body{background:#0a0a0f;color:#e0e0e0;font-family:monospace;padding:10px;max-width:1000px;margin:0 auto}
-h3{color:#ff00ff;margin-bottom:4px}
-.sub{font-size:11px;color:#666;margin-bottom:16px}
-video{display:block;width:48%;height:auto;border-radius:8px;background:#000;border:1px solid #ff00ff;float:left;object-fit: cover;} /* Стилизация видео */
-canvas{width:48%;height:auto;border-radius:8px;background:#000;float:right;image-rendering: pixelated; /* Пиксельный рендеринг */} /* Стилизация canvas */
-.clearfix{clear:both;height:0}
-button{width:100%;padding:14px;margin-top:10px;margin-bottom:5px;border:none;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer;color:#fff;font-family:monospace}
-#start-btn{background:#ff00ff}
-#stop-btn{background:#555}
-#export-btn{background:#00ff9d;color:#0a0a0f}
-#clear-btn{background:#333;color:#ff4444;border:1px solid #ff4444}
-#status{margin-top:8px;font-size:12px;color:#888}
-.stats{display:flex;gap:8px;margin-top:12px}
-.stat{flex:1;background:#111;border:1px solid #333;border-radius:8px;padding:8px;text-align:center}
-.stat-label{font-size:10px;color:#888;text-transform:uppercase}
-.stat-value{font-size:16px;font-weight:700;color:#ff00ff}
-.button-row{display:flex;gap:10px}
-.button-row button{flex:1}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Стример 1-бит Red Binary</title>
+    <style>
+        body{background:#0a0a0f;color:#e0e0e0;font-family:monospace;padding:10px;max-width:1000px;margin:0 auto}
+        h3{color:#ff00ff;margin-bottom:4px}
+        .sub{font-size:11px;color:#666;margin-bottom:16px}
+        video{display:block;width:48%;height:auto;border-radius:8px;background:#000;border:1px solid #ff00ff;float:left;object-fit: cover;}
+        canvas{width:48%;height:auto;border-radius:8px;background:#000;float:right;image-rendering: pixelated;}
+        .clearfix{clear:both;height:0}
+        button{width:100%;padding:14px;margin-top:10px;margin-bottom:5px;border:none;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer;color:#fff;font-family:monospace}
+        #start-btn{background:#ff00ff}
+        #stop-btn{background:#555}
+        #download-btn{background:#00ff9d;color:#0a0a0f}
+        #clear-btn{background:#333;color:#ff4444;border:1px solid #ff4444}
+        #status{margin-top:8px;font-size:12px;color:#888}
+        .stats{display:flex;gap:8px;margin-top:12px}
+        .stat{flex:1;background:#111;border:1px solid #333;border-radius:8px;padding:8px;text-align:center}
+        .stat-label{font-size:10px;color:#888;text-transform:uppercase}
+        .stat-value{font-size:16px;font-weight:700;color:#ff00ff}
+        .button-row{display:flex;gap:10px}
+        .button-row button{flex:1}
+    </style>
 </head>
 <body>
-<h3>🎬 Стример 2-бит Red Only</h3>
-<div class="sub">4 градации на канал · Только R · Байер 4×4 | Лево: Оригинал | Право: 2-битный R рендер</div>
+    <h3>🎬 Стример 1-бит Red Binary</h3>
+    <div class="sub">Белый/Чёрный · Только R · Байер 4×4 | Лево: Оригинал | Право: 1-битный R рендер</div>
 
-<video id="cam" autoplay muted playsinline style="display:none;"></video>
-<video id="originalVideo" autoplay muted playsinline controls></video>
-<canvas id="c"></canvas>
-<div class="clearfix"></div>
+    <video id="cam" autoplay muted playsinline style="display:none;"></video>
+    <video id="originalVideo" autoplay muted playsinline controls></video>
+    <canvas id="c"></canvas>
+    <div class="clearfix"></div>
 
-<div class="button-row">
-<button id="start-btn">▶ СТАРТ</button>
-<button id="stop-btn" style="display:none">⏹ СТОП</button>
-</div>
+    <div class="button-row">
+        <button id="start-btn">▶ СТАРТ</button>
+        <button id="stop-btn" style="display:none">⏹ СТОП</button>
+    </div>
 
-<div id="status">Ожидание...</div>
+    <div id="status">Ожидание...</div>
 
-<div class="stats">
-<div class="stat"><span class="stat-label">Пакетов</span><div class="stat-value" id="packet-count">0</div></div>
-<div class="stat"><span class="stat-label">Кадров</span><div class="stat-value" id="frame-count">0/10</div></div>
-<div class="stat"><span class="stat-label">Пакет</span><div class="stat-value" id="pack-size">—</div></div>
-</div>
+    <div class="stats">
+        <div class="stat"><span class="stat-label">Пакетов</span><div class="stat-value" id="packet-count">0</div></div>
+        <div class="stat"><span class="stat-label">Кадров</span><div class="stat-value" id="frame-count">0/10</div></div>
+        <div class="stat"><span class="stat-label">Файл</span><div class="stat-value" id="file-size">—</div></div>
+    </div>
 
-<div class="button-row">
-<button id="export-btn">📋 ЭКСПОРТ</button>
-<button id="clear-btn">🗑 ОЧИСТИТЬ</button>
-</div>
+    <div class="button-row">
+        <button id="download-btn" disabled>💾 СКАЧАТЬ .RED</button>
+        <button id="clear-btn">🗑 ОЧИСТИТЬ</button>
+    </div>
 
-<script>
-const video=document.getElementById('cam');
-const originalVideo = document.getElementById('originalVideo');
-const canvas=document.getElementById('c');
-const ctx=canvas.getContext('2d');
-const startBtn=document.getElementById('start-btn');
-const stopBtn=document.getElementById('stop-btn');
-const statusEl=document.getElementById('status');
+    <script>
+        const video=document.getElementById('cam');
+        const originalVideo = document.getElementById('originalVideo');
+        const canvas=document.getElementById('c');
+        const ctx=canvas.getContext('2d');
+        const startBtn=document.getElementById('start-btn');
+        const stopBtn=document.getElementById('stop-btn');
+        const downloadBtn=document.getElementById('download-btn');
+        const statusEl=document.getElementById('status');
 
-const TARGET_WIDTH=160; // Уменьшенное разрешение
-const FRAMES_PER_PACKET=10;
-const CAPTURE_INTERVAL=100;
-const STORAGE_KEY='streamer2bit_red_packets';
+        const TARGET_WIDTH=160;
+        const FRAMES_PER_PACKET=10;
+        const CAPTURE_INTERVAL=100;
 
-const BITS=2;
-const LEVELS=4;
-const STEP=64;
-const LEVEL_VALUES=[0,85,170,255]; // Уровни для отображения (0, 1, 2, 3 -> 0, 85, 170, 255)
+        const BAYER4=[[0,8,2,10],[12,4,14,6],[3,11,1,9],[15,7,13,5]];
 
-const BAYER4=[
-[0,8,2,10],
-[12,4,14,6],
-[3,11,1,9],
-[15,7,13,5]
-];
+        let streaming=false;
+        let animationId=null;
+        let frameBuffer=[];
+        let packetStartTime=0;
 
-let streaming=false;
-let animationId=null;
-let frameBuffer=[];
-let packetStartTime=0;
+        let allPacketsBinary = []; // Хранит ArrayBuffer пакетов
 
-let allPackets=[];
-try{
-const stored=localStorage.getItem(STORAGE_KEY);
-if(stored){allPackets=JSON.parse(stored);if(!Array.isArray(allPackets))allPackets=[]}
-}catch(e){allPackets=[]}
-document.getElementById('packet-count').textContent=allPackets.length;
+        function getThreshold(x,y){return BAYER4[y%4][x%4]/16.0}
 
-function getThreshold(x,y){return BAYER4[y%4][x%4]/16}
+        function thresholdRed(value,x,y){
+            const normalizedValue = value / 255.0;
+            const thr = getThreshold(x,y);
+            return normalizedValue > thr ? 1 : 0;
+        }
 
-// Квантование ТОЛЬКО красного канала
-function quantizeRed(value,x,y){
-let base=Math.floor(value/STEP);
-if(base>=LEVELS)base=LEVELS-1;
-const lower=base*STEP;
-const upper=Math.min(255,(base+1)*STEP);
-const norm=(value-lower)/(STEP||1);
-const thr=getThreshold(x,y);
-let level=(norm>thr)?base+1:base;
-if(level>=LEVELS)level=LEVELS-1;
-return level
-}
+        // Функция для создания бинарного пакета
+        function createBinaryPacket(frames, width, height, timestamp) {
+            // Заголовок пакета (фиксированная длина, например 16 байт)
+            // Magic: 4 байта ("RED\0"), n: 4 байта, w: 4 байта, h: 4 байта
+            const headerView = new DataView(new ArrayBuffer(16));
+            headerView.setUint8(0, 'R'.charCodeAt(0));
+            headerView.setUint8(1, 'E'.charCodeAt(0));
+            headerView.setUint8(2, 'D'.charCodeAt(0));
+            headerView.setUint8(3, 0); // \0
+            headerView.setUint32(4, frames.length, true); // n
+            headerView.setUint32(8, width, true);         // w
+            headerView.setUint32(12, height, true);       // h
 
-// Упаковка ТОЛЬКО красного канала (остальные 0)
-function packFrame(levelsR,w,h){
-const bytes=new Uint8Array(w*h);
-for(let i=0;i<w*h;i++){
-const r=levelsR[i]&0x03;
-// G и B = 0, R = первые 2 бита
-bytes[i]=(r<<0)|(0<<2)|(0<<4) // G и B остаются 0
-}
-return bytes
-}
+            const headerBlob = new Blob([headerView.buffer]);
 
-function toBase64(bytes){
-let binary='';
-for(let i=0;i<bytes.length;i++)binary+=String.fromCharCode(bytes[i]);
-return btoa(binary)
-}
+            const frameBlobs = frames.map(frameData => new Blob([new Uint8Array(atob(frameData).split('').map(c => c.charCodeAt(0)))]));
 
-function savePacket(frames,startTime){
-try{
-const stored=localStorage.getItem(STORAGE_KEY);
-const packets=stored?JSON.parse(stored):[];
-if(!Array.isArray(packets))packets.length=0;
+            // Склеиваем заголовок и все фреймы
+            const packetBlob = new Blob([headerBlob, ...frameBlobs]);
+            return packetBlob.arrayBuffer();
+        }
 
-const packet={
-n:frames.length,
-w:TARGET_WIDTH,
-h:Math.round(TARGET_WIDTH*(video.videoHeight||240)/(video.videoWidth||320)), // Высота пропорционально
-b:BITS,
-t:startTime,
-frames:frames.map(f=>({d:f}))
-};
+        function packFrame(levelsR,w,h){
+            const totalBits = w * h;
+            const byteLength = Math.ceil(totalBits / 8);
+            const bytes=new Uint8Array(byteLength);
+            let bitIndex = 0;
+            let byteIndex = 0;
+            let currentByte = 0;
 
-packets.push(packet);
-localStorage.setItem(STORAGE_KEY,JSON.stringify(packets));
-allPackets=packets;
-document.getElementById('packet-count').textContent=packets.length;
-document.getElementById('pack-size').textContent=(JSON.stringify(packet).length/1024).toFixed(1)+' KB';
-statusEl.textContent='🔴 LIVE — пакет #'+packets.length
-}catch(e){console.error(e)}
-}
+            for(let i = 0; i < totalBits; i++){
+                const bitVal = levelsR[i];
+                currentByte |= (bitVal << (7 - (bitIndex % 8)));
+                bitIndex++;
 
-function captureFrame(){
-if(!streaming)return;
-if(video.readyState<2){animationId=setTimeout(captureFrame,CAPTURE_INTERVAL);return}
+                if((bitIndex % 8) === 0 || i === totalBits - 1){
+                    bytes[byteIndex] = currentByte;
+                    byteIndex++;
+                    currentByte = 0;
+                }
+            }
+            return bytes;
+        }
 
-const vw=video.videoWidth;
-const vh=video.videoHeight;
-if(vw===0||vh===0){animationId=setTimeout(captureFrame,CAPTURE_INTERVAL);return}
+        function toBase64(bytes){
+            let binary=''; for(let i=0;i<bytes.length;i++)binary+=String.fromCharCode(bytes[i]); return btoa(binary);
+        }
 
-const aspect=vh/vw;
-const outW=TARGET_WIDTH;
-const outH=Math.max(20,Math.round(TARGET_WIDTH*aspect)); // Минимальная высота
-canvas.width=outW;
-canvas.height=outH;
+        function savePacket(frames, startTime, width, height){
+            try {
+                const packetBufferPromise = createBinaryPacket(frames, width, height, startTime);
+                packetBufferPromise.then(buffer => {
+                    allPacketsBinary.push(buffer);
+                    document.getElementById('packet-count').textContent = allPacketsBinary.length;
+                    const totalSize = allPacketsBinary.reduce((acc, buf) => acc + buf.byteLength, 0);
+                    document.getElementById('file-size').textContent = (totalSize / 1024).toFixed(1) + ' KB';
+                    statusEl.textContent='🔴 LIVE — пакет #'+allPacketsBinary.length;
+                    downloadBtn.disabled = false;
+                });
+            } catch(e) { console.error(e); }
+        }
 
-ctx.drawImage(video,0,0,outW,outH);
-const imageData=ctx.getImageData(0,0,outW,outH);
-const pixels=imageData.data;
+        function captureFrame(){
+            if(!streaming)return;
+            if(video.readyState<2){animationId=setTimeout(captureFrame,CAPTURE_INTERVAL);return}
 
-const levelsR=new Uint8Array(outW*outH);
+            const vw=video.videoWidth;
+            const vh=video.videoHeight;
+            if(vw===0||vh===0){animationId=setTimeout(captureFrame,CAPTURE_INTERVAL);return}
 
-for(let y=0;y<outH;y++){
-for(let x=0;x<outW;x++){
-const idx=(y*outW+x)*4;
-levelsR[y*outW+x]=quantizeRed(pixels[idx],x,y); // Квантуем только R
-}
-}
+            const aspect=vh/vw;
+            const outW=TARGET_WIDTH;
+            const outH=Math.max(20,Math.round(TARGET_WIDTH*aspect));
+            canvas.width=outW;
+            canvas.height=outH;
 
-// --- Рендер ТОЛЬКО красного канала на canvas ---
-const outputImageData = ctx.createImageData(outW, outH);
-for(let i = 0; i < outW * outH; i++){
-    outputImageData.data[i*4] = LEVEL_VALUES[levelsR[i]]; // R = квантованный уровень
-    outputImageData.data[i*4+1] = 0;                     // G = 0
-    outputImageData.data[i*4+2] = 0;                     // B = 0
-    outputImageData.data[i*4+3] = 255;                   // A = 255
-}
-ctx.putImageData(outputImageData, 0, 0);
-// --- Конец рендера ---
+            ctx.drawImage(video,0,0,outW,outH);
+            const imageData=ctx.getImageData(0,0,outW,outH);
+            const pixels=imageData.data;
 
-const packed=packFrame(levelsR,outW,outH); // Упаковываем только R
-const b64=toBase64(packed);
-frameBuffer.push(b64);
-document.getElementById('frame-count').textContent=frameBuffer.length+'/10';
+            const levelsR=new Uint8Array(outW*outH);
 
-if(frameBuffer.length>=FRAMES_PER_PACKET){
-savePacket([...frameBuffer],packetStartTime);
-frameBuffer.length=0;
-packetStartTime=Date.now()
-}
+            for(let y=0;y<outH;y++){
+                for(let x=0;x<outW;x++){
+                    const idx=(y*outW+x)*4;
+                    levelsR[y*outW+x]=thresholdRed(pixels[idx],x,y);
+                }
+            }
 
-if(streaming)animationId=setTimeout(captureFrame,CAPTURE_INTERVAL)
-}
+            const outputImageData = ctx.createImageData(outW, outH);
+            for(let i = 0; i < outW * outH; i++){
+                const val = levelsR[i] ? 255 : 0;
+                outputImageData.data[i*4] = val;
+                outputImageData.data[i*4+1] = 0;
+                outputImageData.data[i*4+2] = 0;
+                outputImageData.data[i*4+3] = 255;
+            }
+            ctx.putImageData(outputImageData, 0, 0);
 
-async function start(){
-try{
-const stream=await navigator.mediaDevices.getUserMedia({
-video:{width:{ideal:640},height:{ideal:480},frameRate:{ideal:30}},
-audio:false
-});
-video.srcObject=stream;
-await video.play();
-originalVideo.srcObject = stream;
-streaming=true;
-startBtn.style.display='none';
-stopBtn.style.display='block';
-frameBuffer.length=0;
-packetStartTime=Date.now();
-document.getElementById('frame-count').textContent='0/10';
-statusEl.textContent='🔴 LIVE — 2-бит Red Only';
-captureFrame()
-}catch(e){
-statusEl.textContent='❌ Ошибка камеры: '+e.message
-}
-}
+            const packed=packFrame(levelsR,outW,outH);
+            const b64=toBase64(packed);
+            frameBuffer.push(b64);
+            document.getElementById('frame-count').textContent=frameBuffer.length+'/10';
 
-function stop(){
-streaming=false;
-if(animationId){clearTimeout(animationId);animationId=null}
-if(frameBuffer.length>0){savePacket([...frameBuffer],packetStartTime);frameBuffer.length=0}
-if(video.srcObject){video.srcObject.getTracks().forEach(t=>t.stop());video.srcObject=null}
-startBtn.style.display='block';
-stopBtn.style.display='none';
-statusEl.textContent='⏹ Остановлен'
-}
+            if(frameBuffer.length>=FRAMES_PER_PACKET){
+                savePacket([...frameBuffer], packetStartTime, outW, outH);
+                frameBuffer.length=0;
+                packetStartTime=Date.now()
+            }
 
-startBtn.addEventListener('click',start);
-stopBtn.addEventListener('click',stop);
+            if(streaming)animationId=setTimeout(captureFrame,CAPTURE_INTERVAL)
+        }
 
-document.getElementById('export-btn').addEventListener('click',()=>{
-const json=JSON.stringify(allPackets,null,2);
-navigator.clipboard.writeText(json).then(()=>{
-statusEl.textContent='✅ Экспортировано ('+(json.length/1024).toFixed(1)+' KB)';
-setTimeout(()=>statusEl.textContent=streaming?'🔴 LIVE':'⏹ Остановлен',2000)
-})
-});
+        async function start(){
+            try{
+                const stream=await navigator.mediaDevices.getUserMedia({
+                    video:{width:{ideal:640},height:{ideal:480},frameRate:{ideal:30}},
+                    audio:false
+                });
+                video.srcObject=stream;
+                await video.play();
+                originalVideo.srcObject = stream;
+                streaming=true;
+                startBtn.style.display='none';
+                stopBtn.style.display='block';
+                frameBuffer.length=0;
+                packetStartTime=Date.now();
+                document.getElementById('frame-count').textContent='0/10';
+                statusEl.textContent='🔴 LIVE — 1-бит Red Binary';
+                captureFrame()
+            }catch(e){
+                statusEl.textContent='❌ Ошибка камеры: '+e.message
+            }
+        }
 
-document.getElementById('clear-btn').addEventListener('click',()=>{
-localStorage.removeItem(STORAGE_KEY);
-allPackets=[];
-document.getElementById('packet-count').textContent='0';
-document.getElementById('pack-size').textContent='—';
-statusEl.textContent='🗑 Очищено'
-});
-</script>
+        function stop(){
+            streaming=false;
+            if(animationId){clearTimeout(animationId);animationId=null}
+            if(frameBuffer.length>0){
+                // Сохраняем неполный пакет, если есть
+                const vw=video.videoWidth;
+                const vh=video.videoHeight;
+                const aspect=vh/vw;
+                const outW=TARGET_WIDTH;
+                const outH=Math.max(20,Math.round(TARGET_WIDTH*aspect));
+                savePacket([...frameBuffer], packetStartTime, outW, outH);
+                frameBuffer.length=0;
+            }
+            if(video.srcObject){video.srcObject.getTracks().forEach(t=>t.stop());video.srcObject=null}
+            startBtn.style.display='block';
+            stopBtn.style.display='none';
+            statusEl.textContent='⏹ Остановлен'
+        }
+
+        startBtn.addEventListener('click',start);
+        stopBtn.addEventListener('click',stop);
+
+        downloadBtn.addEventListener('click', ()=>{
+            if(allPacketsBinary.length === 0) {
+                statusEl.textContent = 'Нечего скачивать';
+                return;
+            }
+            // Собираем всё в один бинарник
+            const totalSize = allPacketsBinary.reduce((acc, buf) => acc + buf.byteLength, 0);
+            const fullBuffer = new Uint8Array(totalSize);
+            let offset = 0;
+            allPacketsBinary.forEach(buf => {
+                fullBuffer.set(new Uint8Array(buf), offset);
+                offset += buf.byteLength;
+            });
+            const blob = new Blob([fullBuffer], {type: 'application/octet-stream'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'stream.red';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            statusEl.textContent = '✅ Файл .red сохранён';
+        });
+
+        document.getElementById('clear-btn').addEventListener('click', ()=>{
+            allPacketsBinary = [];
+            document.getElementById('packet-count').textContent='0';
+            document.getElementById('file-size').textContent='—';
+            downloadBtn.disabled = true;
+            statusEl.textContent='🗑 Очищено'
+        });
+    </script>
 </body>
 </html>
