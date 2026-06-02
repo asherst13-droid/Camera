@@ -1,43 +1,258 @@
+
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Тест Камеры</title>
-    <style>
-        body { margin: 0; padding: 0; overflow: hidden; background-color: #000; }
-        #videoElement { width: 100vw; height: 100vh; object-fit: contain; display: none; }
-        #status { position: absolute; top: 10px; left: 10px; color: white; font-family: Arial, sans-serif; z-index: 10; }
-        #startButton { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 15px 30px; font-size: 18px; cursor: pointer; z-index: 20; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Стример 2-бит RGB</title>
+<style>
+body{background:#0a0a0f;color:#e0e0e0;font-family:monospace;padding:10px;max-width:1000px;margin:0 auto}
+h3{color:#ff00ff;margin-bottom:4px}
+.sub{font-size:11px;color:#666;margin-bottom:16px}
+video{display:block;width:48%;height:auto;border-radius:8px;background:#000;border:1px solid #ff00ff;float:left;}
+canvas{width:48%;height:auto;border-radius:8px;background:#000;border:1px solid #00ffff;float:right;}
+.clearfix{clear:both;height:0}
+button{width:100%;padding:14px;margin-top:10px;margin-bottom:5px;border:none;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer;color:#fff;font-family:monospace}
+#start-btn{background:#ff00ff}
+#stop-btn{background:#555}
+#export-btn{background:#00ff9d;color:#0a0a0f}
+#clear-btn{background:#333;color:#ff4444;border:1px solid #ff4444}
+#status{margin-top:8px;font-size:12px;color:#888}
+.stats{display:flex;gap:8px;margin-top:12px}
+.stat{flex:1;background:#111;border:1px solid #333;border-radius:8px;padding:8px;text-align:center}
+.stat-label{font-size:10px;color:#888;text-transform:uppercase}
+.stat-value{font-size:16px;font-weight:700;color:#ff00ff}
+.button-row{display:flex;gap:10px}
+.button-row button{flex:1}
+</style>
 </head>
 <body>
-    <div id="status">Ожидание запуска камеры...</div>
-    <button id="startButton">Запустить Камеру</button>
-    <video id="videoElement" autoplay playsinline></video>
+<h3>🎬 Стример 2-бит RGB</h3>
+<div class="sub">4 градации на канал · 64 цвета · Байер 4×4 | Лево: Оригинал | Право: 2-битный рендер</div>
 
-    <script>
-        const video = document.getElementById('videoElement');
-        const startButton = document.getElementById('startButton');
-        const status = document.getElementById('status');
+<video id="cam" autoplay muted playsinline style="display:none;"></video>
+<video id="originalVideo" autoplay muted playsinline controls></video>
+<canvas id="c"></canvas>
+<div class="clearfix"></div>
 
-        async function startCamera() {
-            try {
-                status.textContent = 'Запрашиваем доступ к камере...';
-                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-                video.srcObject = stream;
-                await video.play(); // Убедиться, что воспроизведение началось
-                
-                status.textContent = 'Видео активно!';
-                startButton.style.display = 'none'; // Скрыть кнопку
-                video.style.display = 'block'; // Показать видео
-            } catch (err) {
-                console.error("Ошибка доступа к камере:", err);
-                status.textContent = `Ошибка: ${err.message || 'Неизвестная ошибка'}`;
-            }
-        }
+<div class="button-row">
+<button id="start-btn">▶ СТАРТ</button>
+<button id="stop-btn" style="display:none">⏹ СТОП</button>
+</div>
 
-        startButton.onclick = startCamera;
-    </script>
+<div id="status">Ожидание...</div>
+
+<div class="stats">
+<div class="stat"><span class="stat-label">Пакетов</span><div class="stat-value" id="packet-count">0</div></div>
+<div class="stat"><span class="stat-label">Кадров</span><div class="stat-value" id="frame-count">0/10</div></div>
+<div class="stat"><span class="stat-label">Пакет</span><div class="stat-value" id="pack-size">—</div></div>
+</div>
+
+<div class="button-row">
+<button id="export-btn">📋 ЭКСПОРТ</button>
+<button id="clear-btn">🗑 ОЧИСТИТЬ</button>
+</div>
+
+<script>
+const video=document.getElementById('cam');
+const originalVideo = document.getElementById('originalVideo'); // Для отображения оригинала
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+const startBtn=document.getElementById('start-btn');
+const stopBtn=document.getElementById('stop-btn');
+const statusEl=document.getElementById('status');
+
+const TARGET_WIDTH=400;
+const FRAMES_PER_PACKET=10;
+const CAPTURE_INTERVAL=100;
+const STORAGE_KEY='streamer2bit_packets';
+
+const BITS=2;
+const LEVELS=4;
+const STEP=64;
+const LEVEL_VALUES=[0,85,170,255];
+
+const BAYER4=[
+[0,8,2,10],
+[12,4,14,6],
+[3,11,1,9],
+[15,7,13,5]
+];
+
+let streaming=false;
+let animationId=null;
+let frameBuffer=[];
+let packetStartTime=0;
+
+// Загрузка сохранённых
+let allPackets=[];
+try{
+const stored=localStorage.getItem(STORAGE_KEY);
+if(stored){allPackets=JSON.parse(stored);if(!Array.isArray(allPackets))allPackets=[]}
+}catch(e){allPackets=[]}
+document.getElementById('packet-count').textContent=allPackets.length;
+
+function getThreshold(x,y){return BAYER4[y%4][x%4]/16}
+
+function quantizeChannel(value,x,y){
+let base=Math.floor(value/STEP);
+if(base>=LEVELS)base=LEVELS-1;
+const lower=base*STEP;
+const upper=Math.min(255,(base+1)*STEP);
+const norm=(value-lower)/(STEP||1);
+const thr=getThreshold(x,y);
+let level=(norm>thr)?base+1:base;
+if(level>=LEVELS)level=LEVELS-1;
+return level
+}
+
+function packFrame(levelsR,levelsG,levelsB,w,h){
+const bytes=new Uint8Array(w*h);
+for(let i=0;i<w*h;i++){
+const r=levelsR[i]&0x03;
+const g=levelsG[i]&0x03;
+const b=levelsB[i]&0x03;
+bytes[i]=(r<<0)|(g<<2)|(b<<4)
+}
+return bytes
+}
+
+function toBase64(bytes){
+let binary='';
+for(let i=0;i<bytes.length;i++)binary+=String.fromCharCode(bytes[i]);
+return btoa(binary)
+}
+
+function savePacket(frames,startTime){
+try{
+const stored=localStorage.getItem(STORAGE_KEY);
+const packets=stored?JSON.parse(stored):[];
+if(!Array.isArray(packets))packets.length=0;
+
+const packet={
+n:frames.length,
+w:TARGET_WIDTH,
+h:Math.round(TARGET_WIDTH*(video.videoHeight||240)/(video.videoWidth||320)),
+b:BITS,
+t:startTime,
+frames:frames.map(f=>({d:f}))
+};
+
+packets.push(packet);
+localStorage.setItem(STORAGE_KEY,JSON.stringify(packets));
+allPackets=packets;
+document.getElementById('packet-count').textContent=packets.length;
+document.getElementById('pack-size').textContent=(JSON.stringify(packet).length/1024).toFixed(1)+' KB';
+statusEl.textContent='🔴 LIVE — пакет #'+packets.length
+}catch(e){console.error(e)}
+}
+
+function captureFrame(){
+if(!streaming)return;
+if(video.readyState<2){animationId=setTimeout(captureFrame,CAPTURE_INTERVAL);return}
+
+const vw=video.videoWidth;
+const vh=video.videoHeight;
+if(vw===0||vh===0){animationId=setTimeout(captureFrame,CAPTURE_INTERVAL);return}
+
+const aspect=vh/vw;
+const outW=TARGET_WIDTH;
+const outH=Math.max(40,Math.round(TARGET_WIDTH*aspect));
+canvas.width=outW;
+canvas.height=outH;
+
+ctx.drawImage(video,0,0,outW,outH);
+const imageData=ctx.getImageData(0,0,outW,outH);
+const pixels=imageData.data;
+
+const levelsR=new Uint8Array(outW*outH);
+const levelsG=new Uint8Array(outW*outH);
+const levelsB=new Uint8Array(outW*outH);
+
+for(let y=0;y<outH;y++){
+for(let x=0;x<outW;x++){
+const idx=(y*outW+x)*4;
+levelsR[y*outW+x]=quantizeChannel(pixels[idx],x,y);
+levelsG[y*outW+x]=quantizeChannel(pixels[idx+1],x,y);
+levelsB[y*outW+x]=quantizeChannel(pixels[idx+2],x,y)
+}
+}
+
+// --- Рендер 2-битного изображения обратно на canvas ---
+const outputImageData = ctx.createImageData(outW, outH);
+for(let i = 0; i < outW * outH; i++){
+    outputImageData.data[i*4] = LEVEL_VALUES[levelsR[i]];     // R
+    outputImageData.data[i*4+1] = LEVEL_VALUES[levelsG[i]];   // G
+    outputImageData.data[i*4+2] = LEVEL_VALUES[levelsB[i]];   // B
+    outputImageData.data[i*4+3] = 255;                        // A
+}
+ctx.putImageData(outputImageData, 0, 0);
+// --- Конец рендера ---
+
+const packed=packFrame(levelsR,levelsG,levelsB,outW,outH);
+const b64=toBase64(packed);
+frameBuffer.push(b64);
+document.getElementById('frame-count').textContent=frameBuffer.length+'/10';
+
+if(frameBuffer.length>=FRAMES_PER_PACKET){
+savePacket([...frameBuffer],packetStartTime);
+frameBuffer.length=0;
+packetStartTime=Date.now()
+}
+
+if(streaming)animationId=setTimeout(captureFrame,CAPTURE_INTERVAL)
+}
+
+async function start(){
+try{
+const stream=await navigator.mediaDevices.getUserMedia({
+video:{width:{ideal:640},height:{ideal:480},frameRate:{ideal:30}},
+audio:false
+});
+video.srcObject=stream;
+await video.play();
+originalVideo.srcObject = stream; // Отображаем оригинальный поток
+streaming=true;
+startBtn.style.display='none';
+stopBtn.style.display='block';
+frameBuffer.length=0;
+packetStartTime=Date.now();
+document.getElementById('frame-count').textContent='0/10';
+statusEl.textContent='🔴 LIVE — 2-бит RGB';
+captureFrame()
+}catch(e){
+statusEl.textContent='❌ Ошибка камеры: '+e.message
+}
+}
+
+function stop(){
+streaming=false;
+if(animationId){clearTimeout(animationId);animationId=null}
+if(frameBuffer.length>0){savePacket([...frameBuffer],packetStartTime);frameBuffer.length=0}
+if(video.srcObject){video.srcObject.getTracks().forEach(t=>t.stop());video.srcObject=null}
+startBtn.style.display='block';
+stopBtn.style.display='none';
+statusEl.textContent='⏹ Остановлен'
+}
+
+startBtn.addEventListener('click',start);
+stopBtn.addEventListener('click',stop);
+
+document.getElementById('export-btn').addEventListener('click',()=>{
+const json=JSON.stringify(allPackets,null,2);
+navigator.clipboard.writeText(json).then(()=>{
+statusEl.textContent='✅ Экспортировано ('+(json.length/1024).toFixed(1)+' KB)';
+setTimeout(()=>statusEl.textContent=streaming?'🔴 LIVE':'⏹ Остановлен',2000)
+})
+});
+
+document.getElementById('clear-btn').addEventListener('click',()=>{
+localStorage.removeItem(STORAGE_KEY);
+allPackets=[];
+document.getElementById('packet-count').textContent='0';
+document.getElementById('pack-size').textContent='—';
+statusEl.textContent='🗑 Очищено'
+});
+</script>
 </body>
 </html>
