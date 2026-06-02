@@ -24,11 +24,19 @@
         .stat-value{font-size:16px;font-weight:700;color:#ff00ff}
         .button-row{display:flex;gap:10px}
         .button-row button{flex:1}
+        .slider-container { margin: 10px 0; }
+        label { display: block; margin-bottom: 5px; }
+        input[type="range"] { width: 100%; }
     </style>
 </head>
 <body>
     <h3>🎬 Стример 1-бит Red Binary</h3>
     <div class="sub">Белый/Чёрный · Только R · Байер 4×4 | Лево: Оригинал | Право: 1-битный R рендер</div>
+
+    <div class="slider-container">
+        <label for="resolutionSlider">Ширина: <span id="widthDisplay">160</span>px (100%)</label>
+        <input type="range" id="resolutionSlider" min="50" max="160" value="160" step="10">
+    </div>
 
     <video id="cam" autoplay muted playsinline style="display:none;"></video>
     <video id="originalVideo" autoplay muted playsinline controls></video>
@@ -62,8 +70,11 @@
         const stopBtn=document.getElementById('stop-btn');
         const downloadBtn=document.getElementById('download-btn');
         const statusEl=document.getElementById('status');
+        const resolutionSlider = document.getElementById('resolutionSlider');
+        const widthDisplay = document.getElementById('widthDisplay');
 
-        const TARGET_WIDTH=160;
+        let TARGET_WIDTH = parseInt(resolutionSlider.value); // Начальное значение
+
         const FRAMES_PER_PACKET=10;
         const CAPTURE_INTERVAL=100;
 
@@ -74,7 +85,13 @@
         let frameBuffer=[];
         let packetStartTime=0;
 
-        let allPacketsBinary = []; // Хранит ArrayBuffer пакетов
+        let allPacketsBinary = [];
+
+        // Обновление ширины при изменении ползунка
+        resolutionSlider.oninput = function() {
+            TARGET_WIDTH = parseInt(this.value);
+            widthDisplay.textContent = `${TARGET_WIDTH} (${Math.round((TARGET_WIDTH / 160) * 100)}%)`;
+        };
 
         function getThreshold(x,y){return BAYER4[y%4][x%4]/16.0}
 
@@ -84,24 +101,18 @@
             return normalizedValue > thr ? 1 : 0;
         }
 
-        // Функция для создания бинарного пакета
         function createBinaryPacket(frames, width, height, timestamp) {
-            // Заголовок пакета (фиксированная длина, например 16 байт)
-            // Magic: 4 байта ("RED\0"), n: 4 байта, w: 4 байта, h: 4 байта
             const headerView = new DataView(new ArrayBuffer(16));
             headerView.setUint8(0, 'R'.charCodeAt(0));
             headerView.setUint8(1, 'E'.charCodeAt(0));
             headerView.setUint8(2, 'D'.charCodeAt(0));
-            headerView.setUint8(3, 0); // \0
-            headerView.setUint32(4, frames.length, true); // n
-            headerView.setUint32(8, width, true);         // w
-            headerView.setUint32(12, height, true);       // h
+            headerView.setUint8(3, 0);
+            headerView.setUint32(4, frames.length, true);
+            headerView.setUint32(8, width, true);
+            headerView.setUint32(12, height, true);
 
             const headerBlob = new Blob([headerView.buffer]);
-
             const frameBlobs = frames.map(frameData => new Blob([new Uint8Array(atob(frameData).split('').map(c => c.charCodeAt(0)))]));
-
-            // Склеиваем заголовок и все фреймы
             const packetBlob = new Blob([headerBlob, ...frameBlobs]);
             return packetBlob.arrayBuffer();
         }
@@ -155,7 +166,7 @@
             if(vw===0||vh===0){animationId=setTimeout(captureFrame,CAPTURE_INTERVAL);return}
 
             const aspect=vh/vw;
-            const outW=TARGET_WIDTH;
+            const outW=TARGET_WIDTH; // Используем текущее значение из слайдера
             const outH=Math.max(20,Math.round(TARGET_WIDTH*aspect));
             canvas.width=outW;
             canvas.height=outH;
@@ -212,7 +223,7 @@
                 frameBuffer.length=0;
                 packetStartTime=Date.now();
                 document.getElementById('frame-count').textContent='0/10';
-                statusEl.textContent='🔴 LIVE — 1-бит Red Binary';
+                statusEl.textContent=`🔴 LIVE — 1-бит Red Binary (${TARGET_WIDTH}px)`;
                 captureFrame()
             }catch(e){
                 statusEl.textContent='❌ Ошибка камеры: '+e.message
@@ -223,11 +234,10 @@
             streaming=false;
             if(animationId){clearTimeout(animationId);animationId=null}
             if(frameBuffer.length>0){
-                // Сохраняем неполный пакет, если есть
                 const vw=video.videoWidth;
                 const vh=video.videoHeight;
                 const aspect=vh/vw;
-                const outW=TARGET_WIDTH;
+                const outW=TARGET_WIDTH; // Используем текущее значение
                 const outH=Math.max(20,Math.round(TARGET_WIDTH*aspect));
                 savePacket([...frameBuffer], packetStartTime, outW, outH);
                 frameBuffer.length=0;
@@ -246,7 +256,6 @@
                 statusEl.textContent = 'Нечего скачивать';
                 return;
             }
-            // Собираем всё в один бинарник
             const totalSize = allPacketsBinary.reduce((acc, buf) => acc + buf.byteLength, 0);
             const fullBuffer = new Uint8Array(totalSize);
             let offset = 0;
