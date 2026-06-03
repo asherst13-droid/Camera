@@ -1,1 +1,468 @@
-1
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>КРАСНЫЙ БИНАРНИК | 2px полоса / 2px пропуск | Сохранение в .red</title>
+    <style>
+        body {
+            background: #0a0a0f;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            font-family: monospace;
+            color: #ff0000;
+        }
+        .canvas-container {
+            overflow: auto;
+            max-width: 100%;
+            max-height: 60vh;
+            border: 1px solid #300;
+            line-height: 0;
+            background: #000;
+        }
+        canvas {
+            display: block;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+        .controls { margin: 10px 0; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+        button {
+            background: #1a0a0a;
+            color: #ff0000;
+            border: 1px solid #600;
+            padding: 8px 20px;
+            cursor: pointer;
+            font-family: monospace;
+        }
+        button:hover:not(:disabled) { background: #300; }
+        button:disabled { opacity: 0.3; }
+        .info { color: #600; font-size: 11px; margin: 6px 0; text-align: center; }
+        .param-panel {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin: 10px 0;
+            background: #0a0a0a;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #300;
+        }
+        .param-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            min-width: 100px;
+        }
+        .param-group label { font-size: 10px; color: #600; text-transform: uppercase; }
+        .param-group input[type="range"] { width: 110px; accent-color: #ff0000; }
+        .param-group .value { font-size: 14px; font-weight: bold; color: #ff0000; }
+        .live-threshold {
+            font-size: 32px;
+            font-weight: bold;
+            color: #ff0000;
+            text-align: center;
+            margin: 5px 0;
+        }
+        .trigger-dot {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #300;
+            transition: background 0.05s;
+            vertical-align: middle;
+            margin-left: 8px;
+        }
+        .trigger-dot.active { background: #ff0; box-shadow: 0 0 14px #ff0; }
+    </style>
+</head>
+<body>
+
+<h3>▌ КРАСНЫЙ БИНАРНИК ▌2px ПОЛОСА ▌2px ПРОПУСК ▌</h3>
+
+<input type="file" id="fileInput" accept="video/*" style="color:#ff0000; margin: 10px;">
+<video id="sourceVideo" muted loop playsinline style="display:none;"></video>
+
+<div class="live-threshold">
+    ПОРОГ: <span id="liveThreshold">100</span>
+    <span class="trigger-dot" id="triggerDot"></span>
+</div>
+
+<div class="param-panel">
+    <div class="param-group">
+        <label>БАЗОВЫЙ ПОРОГ</label>
+        <input type="range" id="baseSlider" min="20" max="200" value="100" step="1">
+        <span class="value" id="baseValue">100</span>
+    </div>
+    <div class="param-group">
+        <label>ПОРОГ ВСПЫШКИ</label>
+        <input type="range" id="dropSlider" min="10" max="150" value="30" step="1">
+        <span class="value" id="dropValue">30</span>
+    </div>
+    <div class="param-group">
+        <label>ЧУВСТВИТЕЛЬНОСТЬ</label>
+        <input type="range" id="sensSlider" min="1" max="30" value="6" step="0.5">
+        <span class="value" id="sensValue">6</span>
+    </div>
+    <div class="param-group">
+        <label>ДЛИТ. ВСПЫШКИ (сек)</label>
+        <input type="range" id="durSlider" min="0.05" max="0.5" value="0.2" step="0.01">
+        <span class="value" id="durValue">0.20</span>
+    </div>
+    <div class="param-group">
+        <label>BOUNCE</label>
+        <input type="range" id="bounceSlider" min="0" max="1" value="0.5" step="0.05">
+        <span class="value" id="bounceValue">0.50</span>
+    </div>
+</div>
+
+<div class="canvas-container">
+    <canvas id="outputCanvas" width="300" height="200"></canvas>
+</div>
+
+<div class="controls">
+    <button id="playBtn" disabled>▶ СТАРТ</button>
+    <button id="stopBtn" disabled>⏹ СТОП</button>
+    <button id="saveToStorageBtn" disabled>💾 В ЛОКАЛЬНОЕ ХРАНИЛИЩЕ</button>
+    <button id="downloadBtn" disabled>📤 СКАЧАТЬ .RED</button>
+</div>
+
+<div class="info">16 fps | 2px красная полоса / 2px чёрный пропуск | бинарно по красному каналу | триггер по движению</div>
+<div class="info">
+    Кадров: <span id="frameCount">0</span> | 
+    Размер файла: <span id="fileSize">-</span>
+</div>
+
+<script>
+const fileInput = document.getElementById('fileInput');
+const sourceVideo = document.getElementById('sourceVideo');
+const canvas = document.getElementById('outputCanvas');
+const ctx = canvas.getContext('2d');
+const playBtn = document.getElementById('playBtn');
+const stopBtn = document.getElementById('stopBtn');
+const saveToStorageBtn = document.getElementById('saveToStorageBtn');
+const downloadBtn = document.getElementById('downloadBtn');
+
+const baseSlider = document.getElementById('baseSlider');
+const dropSlider = document.getElementById('dropSlider');
+const sensSlider = document.getElementById('sensSlider');
+const durSlider = document.getElementById('durSlider');
+const bounceSlider = document.getElementById('bounceSlider');
+
+const baseValue = document.getElementById('baseValue');
+const dropValue = document.getElementById('dropValue');
+const sensValue = document.getElementById('sensValue');
+const durValue = document.getElementById('durValue');
+const bounceValue = document.getElementById('bounceValue');
+const liveThreshold = document.getElementById('liveThreshold');
+const triggerDot = document.getElementById('triggerDot');
+const frameCountEl = document.getElementById('frameCount');
+const fileSizeEl = document.getElementById('fileSize');
+
+let animationId = null;
+const TARGET_FPS = 16;
+const FRAME_INTERVAL = 1000 / TARGET_FPS;
+let lastFrameTime = 0;
+
+const STRIP_HEIGHT = 2;
+const GAP_HEIGHT = 2;
+const BLOCK_HEIGHT = STRIP_HEIGHT + GAP_HEIGHT;
+
+let baseThreshold = 100;
+let dropThreshold = 30;
+let sensitivity = 6;
+let flashDuration = 0.2;
+let bounceAmount = 0.5;
+
+let currentThreshold = baseThreshold;
+let isFlashing = false;
+let flashStartTime = 0;
+let prevFrameRed = null;
+
+let recordedFrames = []; // Хранение бинарных данных кадров
+
+baseSlider.addEventListener('input', () => {
+    baseThreshold = parseInt(baseSlider.value);
+    baseValue.textContent = baseThreshold;
+    if (!isFlashing) currentThreshold = baseThreshold;
+});
+dropSlider.addEventListener('input', () => {
+    dropThreshold = parseInt(dropSlider.value);
+    dropValue.textContent = dropThreshold;
+});
+sensSlider.addEventListener('input', () => {
+    sensitivity = parseFloat(sensSlider.value);
+    sensValue.textContent = sensitivity;
+});
+durSlider.addEventListener('input', () => {
+    flashDuration = parseFloat(durSlider.value);
+    durValue.textContent = flashDuration.toFixed(2);
+});
+bounceSlider.addEventListener('input', () => {
+    bounceAmount = parseFloat(bounceSlider.value);
+    bounceValue.textContent = bounceAmount.toFixed(2);
+});
+
+function detectMotion(redChannel) {
+    if (!prevFrameRed) return 0;
+    let totalChange = 0;
+    const len = redChannel.length;
+    const step = 8;
+    let count = 0;
+    for (let i = 0; i < len; i += step) {
+        totalChange += Math.abs(redChannel[i] - prevFrameRed[i]);
+        count++;
+    }
+    return totalChange / Math.max(1, count);
+}
+
+function updateThreshold(now) {
+    if (!isFlashing) {
+        currentThreshold = baseThreshold;
+        return;
+    }
+    const elapsed = (now - flashStartTime) / 1000;
+    if (elapsed >= flashDuration) {
+        isFlashing = false;
+        currentThreshold = baseThreshold;
+        triggerDot.classList.remove('active');
+        return;
+    }
+    const t = elapsed / flashDuration;
+    if (t < 0.3) {
+        currentThreshold = baseThreshold + (dropThreshold - baseThreshold) * (t / 0.3);
+    } else {
+        const decay = (t - 0.3) / 0.7;
+        const peak = baseThreshold + (baseThreshold - dropThreshold) * bounceAmount;
+        const osc = Math.sin(decay * Math.PI * 2) * Math.exp(-decay * 3);
+        currentThreshold = baseThreshold + (peak - baseThreshold) * osc;
+    }
+    currentThreshold = Math.max(0, Math.min(255, Math.round(currentThreshold)));
+}
+
+fileInput.addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    sourceVideo.src = URL.createObjectURL(file);
+    sourceVideo.load();
+    sourceVideo.onloadedmetadata = () => {
+        const aspect = sourceVideo.videoHeight / sourceVideo.videoWidth;
+        canvas.width = 300;
+        canvas.height = Math.round(300 * aspect);
+        playBtn.disabled = false;
+    };
+});
+
+function binarizeRow(rowData, threshold) {
+    const binaryRow = new Uint8Array(rowData.length);
+    for (let i = 0; i < rowData.length; i++) {
+        binaryRow[i] = rowData[i] >= threshold ? 1 : 0;
+    }
+    return binaryRow;
+}
+
+function packFrame(binaryData, width, height) {
+    const totalBits = width * height;
+    const byteLength = Math.ceil(totalBits / 8);
+    const bytes = new Uint8Array(byteLength);
+    let bitIndex = 0;
+    let byteIndex = 0;
+    let currentByte = 0;
+
+    for (let i = 0; i < totalBits; i++) {
+        const bitVal = binaryData[i];
+        currentByte |= (bitVal << (7 - (bitIndex % 8)));
+        bitIndex++;
+
+        if ((bitIndex % 8) === 0 || i === totalBits - 1) {
+            bytes[byteIndex] = currentByte;
+            byteIndex++;
+            currentByte = 0;
+        }
+    }
+    return bytes;
+}
+
+function createBinaryPacket(frames, width, height, timestamp) {
+    const headerView = new DataView(new ArrayBuffer(16));
+    headerView.setUint8(0, 'R'.charCodeAt(0));
+    headerView.setUint8(1, 'E'.charCodeAt(0));
+    headerView.setUint8(2, 'D'.charCodeAt(0));
+    headerView.setUint8(3, 0);
+    headerView.setUint32(4, frames.length, true); // n
+    headerView.setUint32(8, width, true);         // w
+    headerView.setUint32(12, height, true);       // h
+
+    const headerBlob = new Blob([headerView.buffer]);
+    const frameBlobs = frames.map(frameData => new Blob([frameData]));
+    const packetBlob = new Blob([headerBlob, ...frameBlobs]);
+    return packetBlob.arrayBuffer();
+}
+
+function renderFrame() {
+    if (sourceVideo.readyState < 2) return;
+
+    ctx.drawImage(sourceVideo, 0, 0, canvas.width, canvas.height);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+
+    const redChannel = new Uint8Array(canvas.width * canvas.height);
+    for (let i = 0; i < canvas.width * canvas.height; i++) {
+        redChannel[i] = data[i * 4];
+    }
+
+    const motion = detectMotion(redChannel);
+    const now = performance.now();
+
+    if (motion > sensitivity && !isFlashing) {
+        isFlashing = true;
+        flashStartTime = now;
+        triggerDot.classList.add('active');
+    }
+    updateThreshold(now);
+    liveThreshold.textContent = Math.round(currentThreshold);
+
+    // Создаем бинарные данные для текущего кадра
+    const binaryFrameData = new Uint8Array(canvas.width * canvas.height);
+    for (let y = 0; y < canvas.height; y++) {
+        const posInBlock = y % BLOCK_HEIGHT;
+        const isStripe = posInBlock < STRIP_HEIGHT;
+
+        for (let x = 0; x < canvas.width; x++) {
+            const idx = (y * canvas.width + x);
+            const red = redChannel[idx];
+            const binaryPixel = (isStripe && red >= currentThreshold) ? 1 : 0;
+            binaryFrameData[idx] = binaryPixel;
+        }
+    }
+
+    recordedFrames.push(binaryFrameData);
+
+    // Рендер на canvas (только для визуализации)
+    for (let y = 0; y < canvas.height; y++) {
+        const posInBlock = y % BLOCK_HEIGHT;
+        const isStripe = posInBlock < STRIP_HEIGHT;
+
+        for (let x = 0; x < canvas.width; x++) {
+            const idx = (y * canvas.width + x) * 4;
+            const binaryPixel = binaryFrameData[y * canvas.width + x];
+
+            if (binaryPixel === 1) {
+                data[idx]     = 255; // R
+                data[idx + 1] = 0;   // G
+                data[idx + 2] = 0;   // B
+            } else {
+                data[idx]     = 0;   // R
+                data[idx + 1] = 0;   // G
+                data[idx + 2] = 0;   // B
+            }
+        }
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+    prevFrameRed = redChannel;
+
+    frameCountEl.textContent = recordedFrames.length;
+}
+
+function processLoop(timestamp) {
+    if (!animationId) return;
+    if (timestamp - lastFrameTime >= FRAME_INTERVAL) {
+        lastFrameTime = timestamp;
+        renderFrame();
+        if (sourceVideo.ended) {
+            stopExperiment();
+            return;
+        }
+    }
+    animationId = requestAnimationFrame(processLoop);
+}
+
+function startExperiment() {
+    if (!sourceVideo.src) return;
+    stopExperiment();
+
+    isFlashing = false;
+    currentThreshold = baseThreshold;
+    prevFrameRed = null;
+    triggerDot.classList.remove('active');
+    liveThreshold.textContent = baseThreshold;
+
+    recordedFrames = [];
+
+    sourceVideo.currentTime = 0;
+    sourceVideo.play();
+    lastFrameTime = performance.now();
+    animationId = requestAnimationFrame(processLoop);
+
+    playBtn.disabled = true;
+    stopBtn.disabled = false;
+    saveToStorageBtn.disabled = true;
+    downloadBtn.disabled = true;
+}
+
+function stopExperiment() {
+    if (animationId) {
+        cancelAnimationFrame(animationId);
+        animationId = null;
+    }
+    sourceVideo.pause();
+    isFlashing = false;
+    currentThreshold = baseThreshold;
+    triggerDot.classList.remove('active');
+    liveThreshold.textContent = baseThreshold;
+    playBtn.disabled = false;
+    stopBtn.disabled = true;
+
+    if (recordedFrames.length > 0) {
+        saveToStorageBtn.disabled = false;
+        downloadBtn.disabled = false;
+    }
+}
+
+function saveToLocalStorage() {
+    if (recordedFrames.length === 0) return;
+
+    // Создаем один пакет из всех кадров
+    const packetBufferPromise = createBinaryPacket(recordedFrames, canvas.width, canvas.height, Date.now());
+    packetBufferPromise.then(buffer => {
+        localStorage.setItem('redBinaryStripesData', JSON.stringify(Array.from(new Uint8Array(buffer))));
+        fileSizeEl.textContent = formatBytes(buffer.byteLength);
+        console.log(`Данные сохранены в localStorage. Размер: ${buffer.byteLength} байт`);
+    }).catch(e => console.error("Ошибка при создании пакета:", e));
+}
+
+function downloadFile() {
+    if (recordedFrames.length === 0) return;
+
+    const packetBufferPromise = createBinaryPacket(recordedFrames, canvas.width, canvas.height, Date.now());
+    packetBufferPromise.then(buffer => {
+        const blob = new Blob([buffer], {type: 'application/octet-stream'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'red_binary_stripes.red';
+        a.click();
+        URL.revokeObjectURL(url);
+        fileSizeEl.textContent = formatBytes(buffer.byteLength);
+    }).catch(e => console.error("Ошибка при создании пакета:", e));
+}
+
+function formatBytes(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+playBtn.addEventListener('click', startExperiment);
+stopBtn.addEventListener('click', stopExperiment);
+saveToStorageBtn.addEventListener('click', saveToLocalStorage);
+downloadBtn.addEventListener('click', downloadFile);
+</script>
+</body>
+</html>
