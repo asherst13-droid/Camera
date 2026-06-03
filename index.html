@@ -3,467 +3,324 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>КРАСНЫЙ БИНАРНИК | 2px полоса / 2px пропуск | Сохранение в .red</title>
+    <title>Стример 1-бит Red Stripes</title>
     <style>
-        body {
-            background: #0a0a0f;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 20px;
-            font-family: monospace;
-            color: #ff0000;
-        }
-        .canvas-container {
-            overflow: auto;
-            max-width: 100%;
-            max-height: 60vh;
-            border: 1px solid #300;
-            line-height: 0;
-            background: #000;
-        }
-        canvas {
-            display: block;
-            image-rendering: pixelated;
-            image-rendering: crisp-edges;
-        }
-        .controls { margin: 10px 0; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
-        button {
-            background: #1a0a0a;
-            color: #ff0000;
-            border: 1px solid #600;
-            padding: 8px 20px;
-            cursor: pointer;
-            font-family: monospace;
-        }
-        button:hover:not(:disabled) { background: #300; }
-        button:disabled { opacity: 0.3; }
-        .info { color: #600; font-size: 11px; margin: 6px 0; text-align: center; }
-        .param-panel {
-            display: flex;
-            gap: 20px;
-            flex-wrap: wrap;
-            justify-content: center;
-            margin: 10px 0;
-            background: #0a0a0a;
-            padding: 15px;
-            border-radius: 8px;
-            border: 1px solid #300;
-        }
-        .param-group {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 4px;
-            min-width: 100px;
-        }
-        .param-group label { font-size: 10px; color: #600; text-transform: uppercase; }
-        .param-group input[type="range"] { width: 110px; accent-color: #ff0000; }
-        .param-group .value { font-size: 14px; font-weight: bold; color: #ff0000; }
-        .live-threshold {
-            font-size: 32px;
-            font-weight: bold;
-            color: #ff0000;
-            text-align: center;
-            margin: 5px 0;
-        }
-        .trigger-dot {
-            display: inline-block;
-            width: 14px;
-            height: 14px;
-            border-radius: 50%;
-            background: #300;
-            transition: background 0.05s;
-            vertical-align: middle;
-            margin-left: 8px;
-        }
-        .trigger-dot.active { background: #ff0; box-shadow: 0 0 14px #ff0; }
+        body{background:#0a0a0f;color:#e0e0e0;font-family:monospace;padding:10px;max-width:1000px;margin:0 auto}
+        h3{color:#ff00ff;margin-bottom:4px}
+        .sub{font-size:11px;color:#666;margin-bottom:16px}
+        video{display:block;width:48%;height:auto;border-radius:8px;background:#000;border:1px solid #ff00ff;float:left;object-fit: cover;}
+        canvas{width:48%;height:auto;border-radius:8px;background:#000;float:right;image-rendering: pixelated;}
+        .clearfix{clear:both;height:0}
+        button{width:100%;padding:14px;margin-top:10px;margin-bottom:5px;border:none;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer;color:#fff;font-family:monospace}
+        #start-btn{background:#ff00ff}
+        #stop-btn{background:#555}
+        #save-btn{background:#00ff9d;color:#0a0a0f}
+        #download-btn{background:#00aaff;color:white}
+        #clear-btn{background:#333;color:#ff4444;border:1px solid #ff4444}
+        #status{margin-top:8px;font-size:12px;color:#888}
+        .stats{display:flex;gap:8px;margin-top:12px}
+        .stat{flex:1;background:#111;border:1px solid #333;border-radius:8px;padding:8px;text-align:center}
+        .stat-label{font-size:10px;color:#888;text-transform:uppercase}
+        .stat-value{font-size:16px;font-weight:700;color:#ff00ff}
+        .button-row{display:flex;gap:10px}
+        .button-row button{flex:1}
+        .slider-container { margin: 10px 0; background: #1a0a1f; padding: 10px; border-radius: 8px; }
+        label { display: block; margin-bottom: 5px; }
+        input[type="range"] { width: 100%; }
     </style>
 </head>
 <body>
+    <h3>🎬 Стример 1-бит Red Stripes</h3>
+    <div class="sub">Полоски 2px/2px · Белый/Чёрный · Только R | Лево: Оригинал | Право: 1-битный R рендер</div>
 
-<h3>▌ КРАСНЫЙ БИНАРНИК ▌2px ПОЛОСА ▌2px ПРОПУСК ▌</h3>
-
-<input type="file" id="fileInput" accept="video/*" style="color:#ff0000; margin: 10px;">
-<video id="sourceVideo" muted loop playsinline style="display:none;"></video>
-
-<div class="live-threshold">
-    ПОРОГ: <span id="liveThreshold">100</span>
-    <span class="trigger-dot" id="triggerDot"></span>
-</div>
-
-<div class="param-panel">
-    <div class="param-group">
-        <label>БАЗОВЫЙ ПОРОГ</label>
-        <input type="range" id="baseSlider" min="20" max="200" value="100" step="1">
-        <span class="value" id="baseValue">100</span>
+    <div class="slider-container">
+        <label for="thresholdSlider">Порог яркости: <span id="thresholdValue">128</span></label>
+        <input type="range" id="thresholdSlider" min="0" max="255" value="128">
     </div>
-    <div class="param-group">
-        <label>ПОРОГ ВСПЫШКИ</label>
-        <input type="range" id="dropSlider" min="10" max="150" value="30" step="1">
-        <span class="value" id="dropValue">30</span>
+
+    <video id="cam" autoplay muted playsinline style="display:none;"></video>
+    <video id="originalVideo" autoplay muted playsinline controls></video>
+    <canvas id="c"></canvas>
+    <div class="clearfix"></div>
+
+    <div class="button-row">
+        <button id="start-btn">▶ СТАРТ КАМЕРА</button>
+        <button id="stop-btn" style="display:none">⏹ СТОП</button>
     </div>
-    <div class="param-group">
-        <label>ЧУВСТВИТЕЛЬНОСТЬ</label>
-        <input type="range" id="sensSlider" min="1" max="30" value="6" step="0.5">
-        <span class="value" id="sensValue">6</span>
+
+    <div id="status">Ожидание запуска камеры...</div>
+
+    <div class="stats">
+        <div class="stat"><span class="stat-label">Кадров</span><div class="stat-value" id="frame-count">0</div></div>
+        <div class="stat"><span class="stat-label">Пакетов</span><div class="stat-value" id="packet-count">0</div></div>
+        <div class="stat"><span class="stat-label">Файл</span><div class="stat-value" id="file-size">—</div></div>
     </div>
-    <div class="param-group">
-        <label>ДЛИТ. ВСПЫШКИ (сек)</label>
-        <input type="range" id="durSlider" min="0.05" max="0.5" value="0.2" step="0.01">
-        <span class="value" id="durValue">0.20</span>
+
+    <div class="button-row">
+        <button id="save-btn" disabled>💾 В LOCALSTORAGE</button>
+        <button id="download-btn" disabled>📤 СКАЧАТЬ .RED</button>
     </div>
-    <div class="param-group">
-        <label>BOUNCE</label>
-        <input type="range" id="bounceSlider" min="0" max="1" value="0.5" step="0.05">
-        <span class="value" id="bounceValue">0.50</span>
+    <div class="button-row">
+        <button id="clear-btn">🗑 ОЧИСТИТЬ</button>
     </div>
-</div>
 
-<div class="canvas-container">
-    <canvas id="outputCanvas" width="300" height="200"></canvas>
-</div>
+    <script>
+        const video=document.getElementById('cam');
+        const originalVideo = document.getElementById('originalVideo');
+        const canvas=document.getElementById('c');
+        const ctx=canvas.getContext('2d');
+        const startBtn=document.getElementById('start-btn');
+        const stopBtn=document.getElementById('stop-btn');
+        const saveBtn = document.getElementById('save-btn');
+        const downloadBtn = document.getElementById('download-btn');
+        const clearBtn = document.getElementById('clear-btn');
+        const statusEl=document.getElementById('status');
+        const thresholdSlider = document.getElementById('thresholdSlider');
+        const thresholdValue = document.getElementById('thresholdValue');
 
-<div class="controls">
-    <button id="playBtn" disabled>▶ СТАРТ</button>
-    <button id="stopBtn" disabled>⏹ СТОП</button>
-    <button id="saveToStorageBtn" disabled>💾 В ЛОКАЛЬНОЕ ХРАНИЛИЩЕ</button>
-    <button id="downloadBtn" disabled>📤 СКАЧАТЬ .RED</button>
-</div>
+        let threshold = parseInt(thresholdSlider.value);
+        thresholdSlider.oninput = () => {
+            threshold = parseInt(thresholdSlider.value);
+            thresholdValue.textContent = threshold;
+        };
 
-<div class="info">16 fps | 2px красная полоса / 2px чёрный пропуск | бинарно по красному каналу | триггер по движению</div>
-<div class="info">
-    Кадров: <span id="frameCount">0</span> | 
-    Размер файла: <span id="fileSize">-</span>
-</div>
+        const TARGET_WIDTH=160;
+        const FRAMES_PER_PACKET=10;
+        const CAPTURE_INTERVAL=100; // ~10 FPS
+        const STORAGE_KEY='streamer_red_stripes_packets';
 
-<script>
-const fileInput = document.getElementById('fileInput');
-const sourceVideo = document.getElementById('sourceVideo');
-const canvas = document.getElementById('outputCanvas');
-const ctx = canvas.getContext('2d');
-const playBtn = document.getElementById('playBtn');
-const stopBtn = document.getElementById('stopBtn');
-const saveToStorageBtn = document.getElementById('saveToStorageBtn');
-const downloadBtn = document.getElementById('downloadBtn');
+        const STRIP_HEIGHT = 2;
+        const GAP_HEIGHT = 2;
+        const BLOCK_HEIGHT = STRIP_HEIGHT + GAP_HEIGHT;
 
-const baseSlider = document.getElementById('baseSlider');
-const dropSlider = document.getElementById('dropSlider');
-const sensSlider = document.getElementById('sensSlider');
-const durSlider = document.getElementById('durSlider');
-const bounceSlider = document.getElementById('bounceSlider');
+        let streaming=false;
+        let animationId=null;
+        let frameBuffer=[]; // Буфер для кадров текущего пакета
+        let allPacketsBinary = []; // Все собранные пакеты
 
-const baseValue = document.getElementById('baseValue');
-const dropValue = document.getElementById('dropValue');
-const sensValue = document.getElementById('sensValue');
-const durValue = document.getElementById('durValue');
-const bounceValue = document.getElementById('bounceValue');
-const liveThreshold = document.getElementById('liveThreshold');
-const triggerDot = document.getElementById('triggerDot');
-const frameCountEl = document.getElementById('frameCount');
-const fileSizeEl = document.getElementById('fileSize');
+        function packFrame(binaryData, width, height) {
+            const totalBits = width * height;
+            const byteLength = Math.ceil(totalBits / 8);
+            const bytes = new Uint8Array(byteLength);
+            let bitIndex = 0;
+            let byteIndex = 0;
+            let currentByte = 0;
 
-let animationId = null;
-const TARGET_FPS = 16;
-const FRAME_INTERVAL = 1000 / TARGET_FPS;
-let lastFrameTime = 0;
+            for (let i = 0; i < totalBits; i++) {
+                const bitVal = binaryData[i];
+                currentByte |= (bitVal << (7 - (bitIndex % 8)));
+                bitIndex++;
 
-const STRIP_HEIGHT = 2;
-const GAP_HEIGHT = 2;
-const BLOCK_HEIGHT = STRIP_HEIGHT + GAP_HEIGHT;
-
-let baseThreshold = 100;
-let dropThreshold = 30;
-let sensitivity = 6;
-let flashDuration = 0.2;
-let bounceAmount = 0.5;
-
-let currentThreshold = baseThreshold;
-let isFlashing = false;
-let flashStartTime = 0;
-let prevFrameRed = null;
-
-let recordedFrames = []; // Хранение бинарных данных кадров
-
-baseSlider.addEventListener('input', () => {
-    baseThreshold = parseInt(baseSlider.value);
-    baseValue.textContent = baseThreshold;
-    if (!isFlashing) currentThreshold = baseThreshold;
-});
-dropSlider.addEventListener('input', () => {
-    dropThreshold = parseInt(dropSlider.value);
-    dropValue.textContent = dropThreshold;
-});
-sensSlider.addEventListener('input', () => {
-    sensitivity = parseFloat(sensSlider.value);
-    sensValue.textContent = sensitivity;
-});
-durSlider.addEventListener('input', () => {
-    flashDuration = parseFloat(durSlider.value);
-    durValue.textContent = flashDuration.toFixed(2);
-});
-bounceSlider.addEventListener('input', () => {
-    bounceAmount = parseFloat(bounceSlider.value);
-    bounceValue.textContent = bounceAmount.toFixed(2);
-});
-
-function detectMotion(redChannel) {
-    if (!prevFrameRed) return 0;
-    let totalChange = 0;
-    const len = redChannel.length;
-    const step = 8;
-    let count = 0;
-    for (let i = 0; i < len; i += step) {
-        totalChange += Math.abs(redChannel[i] - prevFrameRed[i]);
-        count++;
-    }
-    return totalChange / Math.max(1, count);
-}
-
-function updateThreshold(now) {
-    if (!isFlashing) {
-        currentThreshold = baseThreshold;
-        return;
-    }
-    const elapsed = (now - flashStartTime) / 1000;
-    if (elapsed >= flashDuration) {
-        isFlashing = false;
-        currentThreshold = baseThreshold;
-        triggerDot.classList.remove('active');
-        return;
-    }
-    const t = elapsed / flashDuration;
-    if (t < 0.3) {
-        currentThreshold = baseThreshold + (dropThreshold - baseThreshold) * (t / 0.3);
-    } else {
-        const decay = (t - 0.3) / 0.7;
-        const peak = baseThreshold + (baseThreshold - dropThreshold) * bounceAmount;
-        const osc = Math.sin(decay * Math.PI * 2) * Math.exp(-decay * 3);
-        currentThreshold = baseThreshold + (peak - baseThreshold) * osc;
-    }
-    currentThreshold = Math.max(0, Math.min(255, Math.round(currentThreshold)));
-}
-
-fileInput.addEventListener('change', e => {
-    const file = e.target.files[0];
-    if (!file) return;
-    sourceVideo.src = URL.createObjectURL(file);
-    sourceVideo.load();
-    sourceVideo.onloadedmetadata = () => {
-        const aspect = sourceVideo.videoHeight / sourceVideo.videoWidth;
-        canvas.width = 300;
-        canvas.height = Math.round(300 * aspect);
-        playBtn.disabled = false;
-    };
-});
-
-function binarizeRow(rowData, threshold) {
-    const binaryRow = new Uint8Array(rowData.length);
-    for (let i = 0; i < rowData.length; i++) {
-        binaryRow[i] = rowData[i] >= threshold ? 1 : 0;
-    }
-    return binaryRow;
-}
-
-function packFrame(binaryData, width, height) {
-    const totalBits = width * height;
-    const byteLength = Math.ceil(totalBits / 8);
-    const bytes = new Uint8Array(byteLength);
-    let bitIndex = 0;
-    let byteIndex = 0;
-    let currentByte = 0;
-
-    for (let i = 0; i < totalBits; i++) {
-        const bitVal = binaryData[i];
-        currentByte |= (bitVal << (7 - (bitIndex % 8)));
-        bitIndex++;
-
-        if ((bitIndex % 8) === 0 || i === totalBits - 1) {
-            bytes[byteIndex] = currentByte;
-            byteIndex++;
-            currentByte = 0;
+                if ((bitIndex % 8) === 0 || i === totalBits - 1) {
+                    bytes[byteIndex] = currentByte;
+                    byteIndex++;
+                    currentByte = 0;
+                }
+            }
+            return bytes;
         }
-    }
-    return bytes;
-}
 
-function createBinaryPacket(frames, width, height, timestamp) {
-    const headerView = new DataView(new ArrayBuffer(16));
-    headerView.setUint8(0, 'R'.charCodeAt(0));
-    headerView.setUint8(1, 'E'.charCodeAt(0));
-    headerView.setUint8(2, 'D'.charCodeAt(0));
-    headerView.setUint8(3, 0);
-    headerView.setUint32(4, frames.length, true); // n
-    headerView.setUint32(8, width, true);         // w
-    headerView.setUint32(12, height, true);       // h
-
-    const headerBlob = new Blob([headerView.buffer]);
-    const frameBlobs = frames.map(frameData => new Blob([frameData]));
-    const packetBlob = new Blob([headerBlob, ...frameBlobs]);
-    return packetBlob.arrayBuffer();
-}
-
-function renderFrame() {
-    if (sourceVideo.readyState < 2) return;
-
-    ctx.drawImage(sourceVideo, 0, 0, canvas.width, canvas.height);
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const data = imageData.data;
-
-    const redChannel = new Uint8Array(canvas.width * canvas.height);
-    for (let i = 0; i < canvas.width * canvas.height; i++) {
-        redChannel[i] = data[i * 4];
-    }
-
-    const motion = detectMotion(redChannel);
-    const now = performance.now();
-
-    if (motion > sensitivity && !isFlashing) {
-        isFlashing = true;
-        flashStartTime = now;
-        triggerDot.classList.add('active');
-    }
-    updateThreshold(now);
-    liveThreshold.textContent = Math.round(currentThreshold);
-
-    // Создаем бинарные данные для текущего кадра
-    const binaryFrameData = new Uint8Array(canvas.width * canvas.height);
-    for (let y = 0; y < canvas.height; y++) {
-        const posInBlock = y % BLOCK_HEIGHT;
-        const isStripe = posInBlock < STRIP_HEIGHT;
-
-        for (let x = 0; x < canvas.width; x++) {
-            const idx = (y * canvas.width + x);
-            const red = redChannel[idx];
-            const binaryPixel = (isStripe && red >= currentThreshold) ? 1 : 0;
-            binaryFrameData[idx] = binaryPixel;
+        function toBase64(bytes){
+            let binary=''; for(let i=0;i<bytes.length;i++)binary+=String.fromCharCode(bytes[i]); return btoa(binary);
         }
-    }
 
-    recordedFrames.push(binaryFrameData);
+        function createBinaryPacket(frames, width, height, timestamp) {
+            const headerView = new DataView(new ArrayBuffer(16));
+            headerView.setUint8(0, 'R'.charCodeAt(0));
+            headerView.setUint8(1, 'E'.charCodeAt(0));
+            headerView.setUint8(2, 'D'.charCodeAt(0));
+            headerView.setUint8(3, 0);
+            headerView.setUint32(4, frames.length, true); // n
+            headerView.setUint32(8, width, true);         // w
+            headerView.setUint32(12, height, true);       // h
 
-    // Рендер на canvas (только для визуализации)
-    for (let y = 0; y < canvas.height; y++) {
-        const posInBlock = y % BLOCK_HEIGHT;
-        const isStripe = posInBlock < STRIP_HEIGHT;
+            const headerBlob = new Blob([headerView.buffer]);
+            const frameBlobs = frames.map(frameData => new Blob([new Uint8Array(atob(frameData).split('').map(c => c.charCodeAt(0)))]));
+            const packetBlob = new Blob([headerBlob, ...frameBlobs]);
+            return packetBlob.arrayBuffer();
+        }
 
-        for (let x = 0; x < canvas.width; x++) {
-            const idx = (y * canvas.width + x) * 4;
-            const binaryPixel = binaryFrameData[y * canvas.width + x];
+        function savePacket(frames, width, height) {
+            if (frames.length === 0) return;
+            try {
+                const packetBufferPromise = createBinaryPacket(frames, width, height, Date.now());
+                packetBufferPromise.then(buffer => {
+                    allPacketsBinary.push(buffer);
+                    document.getElementById('packet-count').textContent = allPacketsBinary.length;
+                    const totalSize = allPacketsBinary.reduce((acc, buf) => acc + buf.byteLength, 0);
+                    document.getElementById('file-size').textContent = (totalSize / 1024).toFixed(1) + ' KB';
+                    statusEl.textContent = `🔴 LIVE — пакет #${allPacketsBinary.length}`;
+                    saveBtn.disabled = false;
+                    downloadBtn.disabled = false;
+                }).catch(e => console.error("Ошибка при создании пакета:", e));
+            } catch(e) { console.error(e); }
+        }
 
-            if (binaryPixel === 1) {
-                data[idx]     = 255; // R
-                data[idx + 1] = 0;   // G
-                data[idx + 2] = 0;   // B
-            } else {
-                data[idx]     = 0;   // R
-                data[idx + 1] = 0;   // G
-                data[idx + 2] = 0;   // B
+        function captureFrame(){
+            if(!streaming)return;
+            if(video.readyState<2){animationId=setTimeout(captureFrame,CAPTURE_INTERVAL);return}
+
+            const vw=video.videoWidth;
+            const vh=video.videoHeight;
+            if(vw===0||vh===0){animationId=setTimeout(captureFrame,CAPTURE_INTERVAL);return}
+
+            const aspect=vh/vw;
+            const outW=TARGET_WIDTH;
+            const outH=Math.max(20,Math.round(TARGET_WIDTH*aspect));
+            canvas.width=outW;
+            canvas.height=outH;
+
+            ctx.drawImage(video,0,0,outW,outH);
+            const imageData=ctx.getImageData(0,0,outW,outH);
+            const pixels=imageData.data;
+
+            // Создаем бинарные данные для текущего кадра
+            const binaryFrameData = new Uint8Array(outW * outH);
+            for (let y = 0; y < outH; y++) {
+                const posInBlock = y % BLOCK_HEIGHT;
+                const isStripe = posInBlock < STRIP_HEIGHT;
+
+                for (let x = 0; x < outW; x++) {
+                    const idx = (y * outW + x);
+                    const red = pixels[idx * 4]; // Только R
+                    const binaryPixel = (isStripe && red >= threshold) ? 1 : 0;
+                    binaryFrameData[idx] = binaryPixel;
+                }
+            }
+
+            // Рендерим на canvas для визуализации
+            for (let y = 0; y < outH; y++) {
+                const posInBlock = y % BLOCK_HEIGHT;
+                const isStripe = posInBlock < STRIP_HEIGHT;
+
+                for (let x = 0; x < outW; x++) {
+                    const idx = (y * outW + x) * 4;
+                    const binaryPixel = binaryFrameData[y * outW + x];
+
+                    if (binaryPixel === 1) {
+                        pixels[idx] = 255; // R
+                        pixels[idx + 1] = 0; // G
+                        pixels[idx + 2] = 0; // B
+                    } else {
+                        pixels[idx] = 0;   // R
+                        pixels[idx + 1] = 0; // G
+                        pixels[idx + 2] = 0; // B
+                    }
+                }
+            }
+            ctx.putImageData(imageData, 0, 0);
+
+            // Пакуем бинарные данные в base64 (для совместимости с createBinaryPacket)
+            const packed = packFrame(binaryFrameData, outW, outH);
+            const b64 = toBase64(packed);
+            frameBuffer.push(b64);
+
+            const frameCount = document.getElementById('frame-count');
+            frameCount.textContent = parseInt(frameCount.textContent) + 1;
+
+            if(frameBuffer.length>=FRAMES_PER_PACKET){
+                savePacket([...frameBuffer], outW, outH);
+                frameBuffer.length=0;
+            }
+
+            if(streaming)animationId=setTimeout(captureFrame,CAPTURE_INTERVAL)
+        }
+
+        async function start(){
+            try{
+                const stream=await navigator.mediaDevices.getUserMedia({
+                    video:{width:{ideal:640},height:{ideal:480},frameRate:{ideal:30}},
+                    audio:false
+                });
+                video.srcObject=stream;
+                await video.play();
+                originalVideo.srcObject = stream;
+                streaming=true;
+                startBtn.style.display='none';
+                stopBtn.style.display='block';
+                frameBuffer.length=0;
+                statusEl.textContent='🔴 LIVE — 1-бит Red Stripes';
+                captureFrame()
+            }catch(e){
+                statusEl.textContent='❌ Ошибка камеры: '+e.message
             }
         }
-    }
 
-    ctx.putImageData(imageData, 0, 0);
-    prevFrameRed = redChannel;
-
-    frameCountEl.textContent = recordedFrames.length;
-}
-
-function processLoop(timestamp) {
-    if (!animationId) return;
-    if (timestamp - lastFrameTime >= FRAME_INTERVAL) {
-        lastFrameTime = timestamp;
-        renderFrame();
-        if (sourceVideo.ended) {
-            stopExperiment();
-            return;
+        function stop(){
+            streaming=false;
+            if(animationId){clearTimeout(animationId);animationId=null}
+            if(frameBuffer.length>0){
+                const vw=video.videoWidth;
+                const vh=video.videoHeight;
+                const aspect=vh/vw;
+                const outW=TARGET_WIDTH;
+                const outH=Math.max(20,Math.round(TARGET_WIDTH*aspect));
+                savePacket([...frameBuffer], outW, outH);
+                frameBuffer.length=0;
+            }
+            if(video.srcObject){video.srcObject.getTracks().forEach(t=>t.stop());video.srcObject=null}
+            startBtn.style.display='block';
+            stopBtn.style.display='none';
+            statusEl.textContent='⏹ Остановлен'
         }
-    }
-    animationId = requestAnimationFrame(processLoop);
-}
 
-function startExperiment() {
-    if (!sourceVideo.src) return;
-    stopExperiment();
+        startBtn.addEventListener('click',start);
+        stopBtn.addEventListener('click',stop);
 
-    isFlashing = false;
-    currentThreshold = baseThreshold;
-    prevFrameRed = null;
-    triggerDot.classList.remove('active');
-    liveThreshold.textContent = baseThreshold;
+        saveBtn.addEventListener('click', () => {
+             if(allPacketsBinary.length === 0) {
+                 statusEl.textContent = 'Нечего сохранять';
+                 return;
+             }
+             // Собираем всё в один бинарник
+             const totalSize = allPacketsBinary.reduce((acc, buf) => acc + buf.byteLength, 0);
+             const fullBuffer = new Uint8Array(totalSize);
+             let offset = 0;
+             allPacketsBinary.forEach(buf => {
+                 fullBuffer.set(new Uint8Array(buf), offset);
+                 offset += buf.byteLength;
+             });
+             const blob = new Blob([fullBuffer], {type: 'application/octet-stream'});
+             const arrayBuffer = blob.arrayBuffer().then(ab => {
+                 localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(new Uint8Array(ab))));
+                 statusEl.textContent = `✅ Сохранено в localStorage (${ab.byteLength} байт)`;
+             });
+        });
 
-    recordedFrames = [];
+        downloadBtn.addEventListener('click', ()=>{
+            if(allPacketsBinary.length === 0) {
+                statusEl.textContent = 'Нечего скачивать';
+                return;
+            }
+            const totalSize = allPacketsBinary.reduce((acc, buf) => acc + buf.byteLength, 0);
+            const fullBuffer = new Uint8Array(totalSize);
+            let offset = 0;
+            allPacketsBinary.forEach(buf => {
+                fullBuffer.set(new Uint8Array(buf), offset);
+                offset += buf.byteLength;
+            });
+            const blob = new Blob([fullBuffer], {type: 'application/octet-stream'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'stream_stripes.red';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            statusEl.textContent = '✅ Файл .red сохранён';
+        });
 
-    sourceVideo.currentTime = 0;
-    sourceVideo.play();
-    lastFrameTime = performance.now();
-    animationId = requestAnimationFrame(processLoop);
-
-    playBtn.disabled = true;
-    stopBtn.disabled = false;
-    saveToStorageBtn.disabled = true;
-    downloadBtn.disabled = true;
-}
-
-function stopExperiment() {
-    if (animationId) {
-        cancelAnimationFrame(animationId);
-        animationId = null;
-    }
-    sourceVideo.pause();
-    isFlashing = false;
-    currentThreshold = baseThreshold;
-    triggerDot.classList.remove('active');
-    liveThreshold.textContent = baseThreshold;
-    playBtn.disabled = false;
-    stopBtn.disabled = true;
-
-    if (recordedFrames.length > 0) {
-        saveToStorageBtn.disabled = false;
-        downloadBtn.disabled = false;
-    }
-}
-
-function saveToLocalStorage() {
-    if (recordedFrames.length === 0) return;
-
-    // Создаем один пакет из всех кадров
-    const packetBufferPromise = createBinaryPacket(recordedFrames, canvas.width, canvas.height, Date.now());
-    packetBufferPromise.then(buffer => {
-        localStorage.setItem('redBinaryStripesData', JSON.stringify(Array.from(new Uint8Array(buffer))));
-        fileSizeEl.textContent = formatBytes(buffer.byteLength);
-        console.log(`Данные сохранены в localStorage. Размер: ${buffer.byteLength} байт`);
-    }).catch(e => console.error("Ошибка при создании пакета:", e));
-}
-
-function downloadFile() {
-    if (recordedFrames.length === 0) return;
-
-    const packetBufferPromise = createBinaryPacket(recordedFrames, canvas.width, canvas.height, Date.now());
-    packetBufferPromise.then(buffer => {
-        const blob = new Blob([buffer], {type: 'application/octet-stream'});
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'red_binary_stripes.red';
-        a.click();
-        URL.revokeObjectURL(url);
-        fileSizeEl.textContent = formatBytes(buffer.byteLength);
-    }).catch(e => console.error("Ошибка при создании пакета:", e));
-}
-
-function formatBytes(bytes) {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-}
-
-playBtn.addEventListener('click', startExperiment);
-stopBtn.addEventListener('click', stopExperiment);
-saveToStorageBtn.addEventListener('click', saveToLocalStorage);
-downloadBtn.addEventListener('click', downloadFile);
-</script>
+        clearBtn.addEventListener('click', ()=>{
+            allPacketsBinary = [];
+            document.getElementById('packet-count').textContent='0';
+            document.getElementById('frame-count').textContent='0';
+            document.getElementById('file-size').textContent='—';
+            saveBtn.disabled = true;
+            downloadBtn.disabled = true;
+            localStorage.removeItem(STORAGE_KEY);
+            statusEl.textContent='🗑 Очищено'
+        });
+    </script>
 </body>
 </html>
