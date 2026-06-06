@@ -1,326 +1,734 @@
-
+      
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Стример 1-бит Red Stripes</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>КАМЕРА · Gray · Стример</title>
     <style>
-        body{background:#0a0a0f;color:#e0e0e0;font-family:monospace;padding:10px;max-width:1000px;margin:0 auto}
-        h3{color:#ff00ff;margin-bottom:4px}
-        .sub{font-size:11px;color:#666;margin-bottom:16px}
-        video{display:block;width:48%;height:auto;border-radius:8px;background:#000;border:1px solid #ff00ff;float:left;object-fit: cover;}
-        canvas{width:48%;height:auto;border-radius:8px;background:#000;float:right;image-rendering: pixelated;}
-        .clearfix{clear:both;height:0}
-        button{width:100%;padding:14px;margin-top:10px;margin-bottom:5px;border:none;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer;color:#fff;font-family:monospace}
-        #start-btn{background:#ff00ff}
-        #stop-btn{background:#555}
-        #save-btn{background:#00ff9d;color:#0a0a0f}
-        #download-btn{background:#00aaff;color:white}
-        #clear-btn{background:#333;color:#ff4444;border:1px solid #ff4444}
-        #status{margin-top:8px;font-size:12px;color:#888}
-        .stats{display:flex;gap:8px;margin-top:12px}
-        .stat{flex:1;background:#111;border:1px solid #333;border-radius:8px;padding:8px;text-align:center}
-        .stat-label{font-size:10px;color:#888;text-transform:uppercase}
-        .stat-value{font-size:16px;font-weight:700;color:#ff00ff}
-        .button-row{display:flex;gap:10px}
-        .button-row button{flex:1}
-        .slider-container { margin: 10px 0; background: #1a0a1f; padding: 10px; border-radius: 8px; }
-        label { display: block; margin-bottom: 5px; }
-        input[type="range"] { width: 100%; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #0a0a0a;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Courier New', monospace;
+            padding: 20px;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            max-width: 500px;
+            width: 100%;
+        }
+        .canvas-wrapper {
+            background: #000;
+            border: 2px solid #2a2a2a;
+            width: 100%;
+            max-width: 400px;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: auto;
+            image-rendering: crisp-edges;
+            image-rendering: pixelated;
+        }
+        button {
+            background: #1a1a1a;
+            border: 1px solid #3a3a5a;
+            color: #ddd;
+            padding: 10px 18px;
+            font-family: monospace;
+            border-radius: 30px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        button:hover:not(:disabled) { background: #4a4a6a; }
+        button:disabled { opacity: 0.3; cursor: not-allowed; }
+        #startBtn { background: #2a4a2a; border-color: #4a8a4a; }
+        #stopBtn { background: #4a2a2a; border-color: #8a4a4a; }
+        #saveBtn { background: #2a2a4a; border-color: #4a4a8a; }
+        #downloadBtn { background: #4a4a2a; border-color: #8a8a4a; }
+        #clearBtn { background: #3a1a1a; border-color: #6a3a3a; }
+        .status {
+            color: #aaa;
+            font-size: 11px;
+            background: #111;
+            padding: 8px 14px;
+            border-radius: 30px;
+            text-align: center;
+            width: 100%;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+            width: 100%;
+        }
+        .threshold-panel {
+            background: #111;
+            border-radius: 30px;
+            padding: 10px 16px;
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            justify-content: center;
+            font-size: 11px;
+            width: 100%;
+        }
+        .threshold-panel label { color: #aaa; }
+        .threshold-panel input {
+            width: 60px;
+            background: #2a2a3a;
+            border: 1px solid #5a5a7a;
+            color: white;
+            text-align: center;
+            padding: 4px;
+            margin-left: 6px;
+        }
+        .stats {
+            display: flex;
+            gap: 10px;
+            width: 100%;
+            justify-content: space-around;
+        }
+        .stat {
+            background: #111;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 8px;
+            text-align: center;
+            flex: 1;
+        }
+        .stat-label { font-size: 9px; color: #888; text-transform: uppercase; }
+        .stat-value { font-size: 14px; font-weight: bold; color: #ff00ff; }
     </style>
 </head>
 <body>
-    <h3>🎬 Стример 1-бит Red Stripes</h3>
-    <div class="sub">Полоски 2px/2px · Белый/Чёрный · Только R | Лево: Оригинал | Право: 1-битный R рендер</div>
-
-    <div class="slider-container">
-        <label for="thresholdSlider">Порог яркости: <span id="thresholdValue">128</span></label>
-        <input type="range" id="thresholdSlider" min="0" max="255" value="128">
+<div class="container">
+    <div class="canvas-wrapper">
+        <canvas id="outputCanvas" width="300" height="400"></canvas>
     </div>
-
-    <video id="cam" autoplay muted playsinline style="display:none;"></video>
-    <video id="originalVideo" autoplay muted playsinline controls></video>
-    <canvas id="c"></canvas>
-    <div class="clearfix"></div>
-
-    <div class="button-row">
-        <button id="start-btn">▶ СТАРТ КАМЕРА</button>
-        <button id="stop-btn" style="display:none">⏹ СТОП</button>
+    
+    <div class="controls">
+        <button id="startBtn">▶ СТАРТ КАМЕРА</button>
+        <button id="stopBtn" disabled>⏹ СТОП</button>
     </div>
-
-    <div id="status">Ожидание запуска камеры...</div>
-
+    
+    <div class="threshold-panel">
+        <label>⚫ ЧЁРНЫЙ > СЕРЫЙ: <input type="number" id="blackMax" value="86" min="0" max="255" step="1"></label>
+        <label>⚪ СЕРЫЙ > БЕЛЫЙ: <input type="number" id="grayMax" value="220" min="0" max="255" step="1"></label>
+        <button id="applyBtn">ПРИМЕНИТЬ</button>
+    </div>
+    
     <div class="stats">
-        <div class="stat"><span class="stat-label">Кадров</span><div class="stat-value" id="frame-count">0</div></div>
-        <div class="stat"><span class="stat-label">Пакетов</span><div class="stat-value" id="packet-count">0</div></div>
-        <div class="stat"><span class="stat-label">Файл</span><div class="stat-value" id="file-size">—</div></div>
+        <div class="stat">
+            <span class="stat-label">Кадров</span>
+            <div class="stat-value" id="frameCount">0</div>
+        </div>
+        <div class="stat">
+            <span class="stat-label">Пакетов</span>
+            <div class="stat-value" id="packetCount">0</div>
+        </div>
+        <div class="stat">
+            <span class="stat-label">Размер</span>
+            <div class="stat-value" id="fileSize">—</div>
+        </div>
     </div>
-
-    <div class="button-row">
-        <button id="save-btn" disabled>💾 В LOCALSTORAGE</button>
-        <button id="download-btn" disabled>📤 СКАЧАТЬ .RED</button>
+    
+    <div class="controls">
+        <button id="saveBtn" disabled>💾 LOCALSTORAGE</button>
+        <button id="downloadBtn" disabled>📤 СКАЧАТЬ .RED</button>
     </div>
-    <div class="button-row">
-        <button id="clear-btn">🗑 ОЧИСТИТЬ</button>
+    <div class="controls">
+        <button id="clearBtn">🗑 ОЧИСТИТЬ</button>
     </div>
+    
+    <div class="status" id="statusText">
+        ⚡ КАМЕРА · 3 ГРАДАЦИИ · ЧЁРНЫЙ/СЕРЫЙ/БЕЛЫЙ ⚡<br>
+        ПОРОГИ: 0-86 / 87-220 / 221-255
+    </div>
+</div>
 
-    <script>
-        const video=document.getElementById('cam');
-        const originalVideo = document.getElementById('originalVideo');
-        const canvas=document.getElementById('c');
-        const ctx=canvas.getContext('2d');
-        const startBtn=document.getElementById('start-btn');
-        const stopBtn=document.getElementById('stop-btn');
-        const saveBtn = document.getElementById('save-btn');
-        const downloadBtn = document.getElementById('download-btn');
-        const clearBtn = document.getElementById('clear-btn');
-        const statusEl=document.getElementById('status');
-        const thresholdSlider = document.getElementById('thresholdSlider');
-        const thresholdValue = document.getElementById('thresholdValue');
+<video id="cameraVideo" autoplay muted playsinline style="display:none;"></video>
 
-        let threshold = parseInt(thresholdSlider.value);
-        thresholdSlider.oninput = () => {
-            threshold = parseInt(thresholdSlider.value);
-            thresholdValue.textContent = threshold;
-        };
-
-        const TARGET_WIDTH=160;
-        const FRAMES_PER_PACKET=10;
-        const CAPTURE_INTERVAL=100; // ~10 FPS
-        const STORAGE_KEY='streamer_red_stripes_packets';
-
-        const STRIP_HEIGHT = 2;
-        const GAP_HEIGHT = 2;
-        const BLOCK_HEIGHT = STRIP_HEIGHT + GAP_HEIGHT;
-
-        let streaming=false;
-        let animationId=null;
-        let frameBuffer=[]; // Буфер для кадров текущего пакета
-        let allPacketsBinary = []; // Все собранные пакеты
-
-        function packFrame(binaryData, width, height) {
-            const totalBits = width * height;
-            const byteLength = Math.ceil(totalBits / 8);
-            const bytes = new Uint8Array(byteLength);
-            let bitIndex = 0;
-            let byteIndex = 0;
-            let currentByte = 0;
-
-            for (let i = 0; i < totalBits; i++) {
-                const bitVal = binaryData[i];
-                currentByte |= (bitVal << (7 - (bitIndex % 8)));
-                bitIndex++;
-
-                if ((bitIndex % 8) === 0 || i === totalBits - 1) {
-                    bytes[byteIndex] = currentByte;
-                    byteIndex++;
-                    currentByte = 0;
+<script>
+(function() {
+    const canvas = document.getElementById('outputCanvas');
+    const ctx = canvas.getContext('2d');
+    const cameraVideo = document.getElementById('cameraVideo');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const saveBtn = document.getElementById('saveBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const statusDiv = document.getElementById('statusText');
+    const blackMaxInput = document.getElementById('blackMax');
+    const grayMaxInput = document.getElementById('grayMax');
+    const applyBtn = document.getElementById('applyBtn');
+    const frameCountEl = document.getElementById('frameCount');
+    const packetCountEl = document.getElementById('packetCount');
+    const fileSizeEl = document.getElementById('fileSize');
+    
+    const TARGET_WIDTH = 300;
+    const FRAMES_PER_PACKET = 10;
+    const CAPTURE_INTERVAL = 100; // ~10 FPS
+    const STORAGE_KEY = 'camera_3gray_packets';
+    
+    canvas.width = TARGET_WIDTH;
+    
+    let BLACK_MAX = 86;
+    let GRAY_MAX = 220;
+    
+    let cameraActive = false;
+    let globalFrame = 0;
+    let animationId = null;
+    let captureTimeout = null;
+    
+    let allPacketsBinary = [];
+    let frameBuffer = [];
+    
+    // ---------- ЧЁРНЫЙ ШУМ ----------
+    const BLACK_W = 6;
+    const BLACK_H = 4;
+    function generateNoiseBlack(width, height) {
+        const imgData = ctx.createImageData(width, height);
+        const data = imgData.data;
+        for (let i = 0; i < data.length; i += 4) {
+            data[i] = 0; data[i+1] = 0; data[i+2] = 0; data[i+3] = 255;
+        }
+        const blocksX = Math.ceil(width / BLACK_W) + 1;
+        const blocksY = Math.ceil(height / BLACK_H) + 1;
+        for (let by = 0; by < blocksY; by++) {
+            for (let bx = 0; bx < blocksX; bx++) {
+                let brightness;
+                const r = Math.random();
+                const isSparkle = r < 0.008;
+                const isBlack = !isSparkle && Math.random() < 0.30;
+                if (isSparkle) brightness = 190 + Math.floor(Math.random() * 66);
+                else if (isBlack) brightness = 0;
+                else {
+                    brightness = 25 + Math.floor(Math.random() * 64);
+                    if (Math.random() < 0.15) brightness = Math.min(100, brightness + 12);
                 }
-            }
-            return bytes;
-        }
-
-        function toBase64(bytes){
-            let binary=''; for(let i=0;i<bytes.length;i++)binary+=String.fromCharCode(bytes[i]); return btoa(binary);
-        }
-
-        function createBinaryPacket(frames, width, height, timestamp) {
-            const headerView = new DataView(new ArrayBuffer(16));
-            headerView.setUint8(0, 'R'.charCodeAt(0));
-            headerView.setUint8(1, 'E'.charCodeAt(0));
-            headerView.setUint8(2, 'D'.charCodeAt(0));
-            headerView.setUint8(3, 0);
-            headerView.setUint32(4, frames.length, true); // n
-            headerView.setUint32(8, width, true);         // w
-            headerView.setUint32(12, height, true);       // h
-
-            const headerBlob = new Blob([headerView.buffer]);
-            const frameBlobs = frames.map(frameData => new Blob([new Uint8Array(atob(frameData).split('').map(c => c.charCodeAt(0)))]));
-            const packetBlob = new Blob([headerBlob, ...frameBlobs]);
-            return packetBlob.arrayBuffer();
-        }
-
-        function savePacket(frames, width, height) {
-            if (frames.length === 0) return;
-            try {
-                const packetBufferPromise = createBinaryPacket(frames, width, height, Date.now());
-                packetBufferPromise.then(buffer => {
-                    allPacketsBinary.push(buffer);
-                    document.getElementById('packet-count').textContent = allPacketsBinary.length;
-                    const totalSize = allPacketsBinary.reduce((acc, buf) => acc + buf.byteLength, 0);
-                    document.getElementById('file-size').textContent = (totalSize / 1024).toFixed(1) + ' KB';
-                    statusEl.textContent = `🔴 LIVE — пакет #${allPacketsBinary.length}`;
-                    saveBtn.disabled = false;
-                    downloadBtn.disabled = false;
-                }).catch(e => console.error("Ошибка при создании пакета:", e));
-            } catch(e) { console.error(e); }
-        }
-
-        function captureFrame(){
-            if(!streaming)return;
-            if(video.readyState<2){animationId=setTimeout(captureFrame,CAPTURE_INTERVAL);return}
-
-            const vw=video.videoWidth;
-            const vh=video.videoHeight;
-            if(vw===0||vh===0){animationId=setTimeout(captureFrame,CAPTURE_INTERVAL);return}
-
-            const aspect=vh/vw;
-            const outW=TARGET_WIDTH;
-            const outH=Math.max(20,Math.round(TARGET_WIDTH*aspect));
-            canvas.width=outW;
-            canvas.height=outH;
-
-            ctx.drawImage(video,0,0,outW,outH);
-            const imageData=ctx.getImageData(0,0,outW,outH);
-            const pixels=imageData.data;
-
-            // Создаем бинарные данные для текущего кадра
-            const binaryFrameData = new Uint8Array(outW * outH);
-            for (let y = 0; y < outH; y++) {
-                const posInBlock = y % BLOCK_HEIGHT;
-                const isStripe = posInBlock < STRIP_HEIGHT;
-
-                for (let x = 0; x < outW; x++) {
-                    const idx = (y * outW + x);
-                    const red = pixels[idx * 4]; // Только R
-                    const binaryPixel = (isStripe && red >= threshold) ? 1 : 0;
-                    binaryFrameData[idx] = binaryPixel;
-                }
-            }
-
-            // Рендерим на canvas для визуализации
-            for (let y = 0; y < outH; y++) {
-                const posInBlock = y % BLOCK_HEIGHT;
-                const isStripe = posInBlock < STRIP_HEIGHT;
-
-                for (let x = 0; x < outW; x++) {
-                    const idx = (y * outW + x) * 4;
-                    const binaryPixel = binaryFrameData[y * outW + x];
-
-                    if (binaryPixel === 1) {
-                        pixels[idx] = 255; // R
-                        pixels[idx + 1] = 0; // G
-                        pixels[idx + 2] = 0; // B
-                    } else {
-                        pixels[idx] = 0;   // R
-                        pixels[idx + 1] = 0; // G
-                        pixels[idx + 2] = 0; // B
+                const finalVal = Math.min(255, Math.max(0, brightness));
+                const startX = bx * BLACK_W;
+                const startY = by * BLACK_H;
+                for (let dy = 0; dy < BLACK_H; dy++) {
+                    const y = startY + dy;
+                    if (y < 0 || y >= height) continue;
+                    for (let dx = 0; dx < BLACK_W; dx++) {
+                        const x = startX + dx;
+                        if (x < 0 || x >= width) continue;
+                        const idx = (y * width + x) * 4;
+                        data[idx] = finalVal; data[idx+1] = finalVal; data[idx+2] = finalVal;
                     }
                 }
             }
-            ctx.putImageData(imageData, 0, 0);
-
-            // Пакуем бинарные данные в base64 (для совместимости с createBinaryPacket)
-            const packed = packFrame(binaryFrameData, outW, outH);
-            const b64 = toBase64(packed);
-            frameBuffer.push(b64);
-
-            const frameCount = document.getElementById('frame-count');
-            frameCount.textContent = parseInt(frameCount.textContent) + 1;
-
-            if(frameBuffer.length>=FRAMES_PER_PACKET){
-                savePacket([...frameBuffer], outW, outH);
-                frameBuffer.length=0;
-            }
-
-            if(streaming)animationId=setTimeout(captureFrame,CAPTURE_INTERVAL)
         }
-
-        async function start(){
-            try{
-                const stream=await navigator.mediaDevices.getUserMedia({
-                    video:{width:{ideal:640},height:{ideal:480},frameRate:{ideal:30}},
-                    audio:false
-                });
-                video.srcObject=stream;
-                await video.play();
-                originalVideo.srcObject = stream;
-                streaming=true;
-                startBtn.style.display='none';
-                stopBtn.style.display='block';
-                frameBuffer.length=0;
-                statusEl.textContent='🔴 LIVE — 1-бит Red Stripes';
-                captureFrame()
-            }catch(e){
-                statusEl.textContent='❌ Ошибка камеры: '+e.message
+        return imgData;
+    }
+    
+    // ---------- СЕРЫЙ ШУМ ----------
+    const GRAY_W = 4;
+    const GRAY_H = 2;
+    let grayCache = null;
+    let grayDimensions = { w: 0, h: 0 };
+    function generateNoiseGray(width, height) {
+        const imgData = ctx.createImageData(width, height);
+        const data = imgData.data;
+        for (let i = 0; i < data.length; i += 4) {
+            data[i] = 80; data[i+1] = 80; data[i+2] = 80; data[i+3] = 255;
+        }
+        const blocksX = Math.ceil(width / GRAY_W) + 1;
+        const blocksY = Math.ceil(height / GRAY_H) + 1;
+        for (let by = 0; by < blocksY; by++) {
+            for (let bx = 0; bx < blocksX; bx++) {
+                let brightness = 80 + Math.floor(Math.random() * 56);
+                if (Math.random() < 0.2) {
+                    brightness += (Math.random() < 0.5 ? -12 : 12);
+                    brightness = Math.min(150, Math.max(68, brightness));
+                }
+                const finalVal = Math.min(255, Math.max(0, brightness));
+                const startX = bx * GRAY_W;
+                const startY = by * GRAY_H;
+                for (let dy = 0; dy < GRAY_H; dy++) {
+                    const y = startY + dy;
+                    if (y < 0 || y >= height) continue;
+                    for (let dx = 0; dx < GRAY_W; dx++) {
+                        const x = startX + dx;
+                        if (x < 0 || x >= width) continue;
+                        const idx = (y * width + x) * 4;
+                        data[idx] = finalVal; data[idx+1] = finalVal; data[idx+2] = finalVal;
+                    }
+                }
             }
         }
-
-        function stop(){
-            streaming=false;
-            if(animationId){clearTimeout(animationId);animationId=null}
-            if(frameBuffer.length>0){
-                const vw=video.videoWidth;
-                const vh=video.videoHeight;
-                const aspect=vh/vw;
-                const outW=TARGET_WIDTH;
-                const outH=Math.max(20,Math.round(TARGET_WIDTH*aspect));
-                savePacket([...frameBuffer], outW, outH);
-                frameBuffer.length=0;
-            }
-            if(video.srcObject){video.srcObject.getTracks().forEach(t=>t.stop());video.srcObject=null}
-            startBtn.style.display='block';
-            stopBtn.style.display='none';
-            statusEl.textContent='⏹ Остановлен'
+        return imgData;
+    }
+    function getGrayNoise(width, height) {
+        if (!grayCache || grayDimensions.w !== width || grayDimensions.h !== height) {
+            grayCache = generateNoiseGray(width, height);
+            grayDimensions = { w: width, h: height };
+            return grayCache;
         }
-
-        startBtn.addEventListener('click',start);
-        stopBtn.addEventListener('click',stop);
-
-        saveBtn.addEventListener('click', () => {
-             if(allPacketsBinary.length === 0) {
-                 statusEl.textContent = 'Нечего сохранять';
-                 return;
-             }
-             // Собираем всё в один бинарник
-             const totalSize = allPacketsBinary.reduce((acc, buf) => acc + buf.byteLength, 0);
-             const fullBuffer = new Uint8Array(totalSize);
-             let offset = 0;
-             allPacketsBinary.forEach(buf => {
-                 fullBuffer.set(new Uint8Array(buf), offset);
-                 offset += buf.byteLength;
-             });
-             const blob = new Blob([fullBuffer], {type: 'application/octet-stream'});
-             const arrayBuffer = blob.arrayBuffer().then(ab => {
-                 localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(new Uint8Array(ab))));
-                 statusEl.textContent = `✅ Сохранено в localStorage (${ab.byteLength} байт)`;
-             });
-        });
-
-        downloadBtn.addEventListener('click', ()=>{
-            if(allPacketsBinary.length === 0) {
-                statusEl.textContent = 'Нечего скачивать';
-                return;
+        if (globalFrame % 2 === 0) grayCache = generateNoiseGray(width, height);
+        return grayCache;
+    }
+    
+    // ---------- БЕЛЫЙ ШУМ ----------
+    const WHITE_W = 2;
+    const WHITE_H = 1;
+    let whiteNoiseA = null, whiteNoiseB = null;
+    let whiteInterp = 1.0;
+    let whiteUpdateCounter = 0;
+    const WHITE_UPDATE_FRAMES = 8;
+    function generateRawWhiteNoise(width, height) {
+        const imgData = ctx.createImageData(width, height);
+        const data = imgData.data;
+        const blocksX = Math.ceil(width / WHITE_W) + 1;
+        const blocksY = Math.ceil(height / WHITE_H) + 1;
+        for (let by = 0; by < blocksY; by++) {
+            for (let bx = 0; bx < blocksX; bx++) {
+                let brightness;
+                if (Math.random() < 0.4) brightness = 200 + Math.floor(Math.random() * 56);
+                else brightness = 160 + Math.floor(Math.random() * 40);
+                const finalVal = Math.min(255, Math.max(0, brightness));
+                const startX = bx * WHITE_W;
+                const startY = by * WHITE_H;
+                for (let dy = 0; dy < WHITE_H; dy++) {
+                    const y = startY + dy;
+                    if (y < 0 || y >= height) continue;
+                    for (let dx = 0; dx < WHITE_W; dx++) {
+                        const x = startX + dx;
+                        if (x < 0 || x >= width) continue;
+                        const idx = (y * width + x) * 4;
+                        data[idx] = finalVal; data[idx+1] = finalVal; data[idx+2] = finalVal; data[idx+3] = 255;
+                    }
+                }
             }
-            const totalSize = allPacketsBinary.reduce((acc, buf) => acc + buf.byteLength, 0);
-            const fullBuffer = new Uint8Array(totalSize);
-            let offset = 0;
-            allPacketsBinary.forEach(buf => {
-                fullBuffer.set(new Uint8Array(buf), offset);
-                offset += buf.byteLength;
+        }
+        return imgData;
+    }
+    function initWhiteNoise(width, height) {
+        whiteNoiseA = generateRawWhiteNoise(width, height);
+        whiteNoiseB = generateRawWhiteNoise(width, height);
+        whiteInterp = 1.0;
+        whiteUpdateCounter = 0;
+    }
+    function getWhiteNoise(width, height) {
+        if (!whiteNoiseA || whiteNoiseA.width !== width || whiteNoiseA.height !== height) {
+            initWhiteNoise(width, height);
+        }
+        if (whiteUpdateCounter >= WHITE_UPDATE_FRAMES) {
+            const newNoise = generateRawWhiteNoise(width, height);
+            whiteNoiseA = whiteNoiseB;
+            whiteNoiseB = newNoise;
+            whiteInterp = 1.0;
+            whiteUpdateCounter = 0;
+        }
+        const weightA = whiteInterp;
+        const weightB = 1.0 - whiteInterp;
+        const result = ctx.createImageData(width, height);
+        const dataA = whiteNoiseA.data;
+        const dataB = whiteNoiseB.data;
+        const out = result.data;
+        for (let i = 0; i < out.length; i += 4) {
+            const val = Math.floor(dataA[i] * weightA + dataB[i] * weightB);
+            out[i] = val; out[i+1] = val; out[i+2] = val; out[i+3] = 255;
+        }
+        whiteInterp -= 1.0 / WHITE_UPDATE_FRAMES;
+        if (whiteInterp < 0) whiteInterp = 0;
+        whiteUpdateCounter++;
+        return result;
+    }
+    
+    // ---------- КАРТА ДЕТАЛЬНОСТИ ----------
+    function computeDetailMapFast(videoData, width, height) {
+        const detailMap = new Float32Array(width * height);
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                let sum = 0, count = 0, mean = 0;
+                for (let dy = -2; dy <= 2; dy++) {
+                    const ny = y + dy;
+                    if (ny < 0 || ny >= height) continue;
+                    for (let dx = -2; dx <= 2; dx++) {
+                        const nx = x + dx;
+                        if (nx < 0 || nx >= width) continue;
+                        const idx = (ny * width + nx) * 4;
+                        const lum = 0.299 * videoData[idx] + 0.587 * videoData[idx+1] + 0.114 * videoData[idx+2];
+                        mean += lum; count++;
+                    }
+                }
+                mean /= count;
+                let variance = 0;
+                for (let dy = -2; dy <= 2; dy++) {
+                    const ny = y + dy;
+                    if (ny < 0 || ny >= height) continue;
+                    for (let dx = -2; dx <= 2; dx++) {
+                        const nx = x + dx;
+                        if (nx < 0 || nx >= width) continue;
+                        const idx = (ny * width + nx) * 4;
+                        const lum = 0.299 * videoData[idx] + 0.587 * videoData[idx+1] + 0.114 * videoData[idx+2];
+                        variance += Math.pow(lum - mean, 2);
+                    }
+                }
+                variance /= count;
+                let norm = Math.min(1.0, variance / 1500);
+                detailMap[y * width + x] = norm;
+            }
+        }
+        return detailMap;
+    }
+    
+    // ---------- УПАКОВКА 3-ГРАДАЦИОННОГО КАДРА ----------
+    function packFrame3Gray(zoneMap, width, height) {
+        // 2 бита на пиксель, 4 пикселя в байте
+        const totalPixels = width * height;
+        const byteLength = Math.ceil(totalPixels / 4);
+        const bytes = new Uint8Array(byteLength);
+        
+        for (let i = 0; i < totalPixels; i++) {
+            const zone = zoneMap[i]; // 0, 1, или 2
+            const byteIndex = Math.floor(i / 4);
+            const bitOffset = (3 - (i % 4)) * 2; // MSB first
+            bytes[byteIndex] |= (zone << bitOffset);
+        }
+        return bytes;
+    }
+    
+    function toBase64(bytes) {
+        let binary = '';
+        for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+        return btoa(binary);
+    }
+    
+    function createBinaryPacket(frames, width, height) {
+        const headerView = new DataView(new ArrayBuffer(16));
+        headerView.setUint8(0, 'R'.charCodeAt(0));
+        headerView.setUint8(1, 'E'.charCodeAt(0));
+        headerView.setUint8(2, 'D'.charCodeAt(0));
+        headerView.setUint8(3, 0);
+        headerView.setUint32(4, frames.length, true);
+        headerView.setUint32(8, width, true);
+        headerView.setUint32(12, height, true);
+        
+        const headerBlob = new Blob([headerView.buffer]);
+        const frameBlobs = frames.map(frameData => new Blob([new Uint8Array(atob(frameData).split('').map(c => c.charCodeAt(0)))]));
+        const packetBlob = new Blob([headerBlob, ...frameBlobs]);
+        return packetBlob.arrayBuffer();
+    }
+    
+    function savePacket(frames, width, height) {
+        if (frames.length === 0) return;
+        try {
+            const packetBufferPromise = createBinaryPacket(frames, width, height);
+            packetBufferPromise.then(buffer => {
+                allPacketsBinary.push(buffer);
+                packetCountEl.textContent = allPacketsBinary.length;
+                const totalSize = allPacketsBinary.reduce((acc, buf) => acc + buf.byteLength, 0);
+                fileSizeEl.textContent = (totalSize / 1024).toFixed(1) + ' KB';
+                statusDiv.innerHTML = `🔴 LIVE — пакет #${allPacketsBinary.length}`;
+                saveBtn.disabled = false;
+                downloadBtn.disabled = false;
+            }).catch(e => console.error("Ошибка при создании пакета:", e));
+        } catch(e) { console.error(e); }
+    }
+    
+    // ---------- ОСНОВНОЙ ПРОЦЕСС С КАМЕРЫ ----------
+    function processCameraFrame() {
+        if (!cameraActive) return;
+        if (cameraVideo.readyState < 2) {
+            captureTimeout = setTimeout(processCameraFrame, CAPTURE_INTERVAL);
+            return;
+        }
+        
+        const vw = cameraVideo.videoWidth;
+        const vh = cameraVideo.videoHeight;
+        if (vw === 0 || vh === 0) {
+            captureTimeout = setTimeout(processCameraFrame, CAPTURE_INTERVAL);
+            return;
+        }
+        
+        const targetHeight = Math.floor(TARGET_WIDTH * (vh / vw));
+        if (canvas.height !== targetHeight && targetHeight > 0) {
+            canvas.height = targetHeight;
+            grayCache = null;
+            initWhiteNoise(TARGET_WIDTH, targetHeight);
+        }
+        if (targetHeight <= 0) {
+            captureTimeout = setTimeout(processCameraFrame, CAPTURE_INTERVAL);
+            return;
+        }
+        
+        // Рисуем кадр с камеры на временный canvas
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = TARGET_WIDTH;
+        tempCanvas.height = targetHeight;
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.drawImage(cameraVideo, 0, 0, TARGET_WIDTH, targetHeight);
+        const videoImage = tempCtx.getImageData(0, 0, TARGET_WIDTH, targetHeight);
+        const videoData = videoImage.data;
+        
+        const detailMap = computeDetailMapFast(videoData, TARGET_WIDTH, targetHeight);
+        
+        const blackNoise = generateNoiseBlack(TARGET_WIDTH, targetHeight);
+        const blackData = blackNoise.data;
+        const grayNoise = getGrayNoise(TARGET_WIDTH, targetHeight);
+        const grayData = grayNoise.data;
+        const whiteNoise = getWhiteNoise(TARGET_WIDTH, targetHeight);
+        const whiteData = whiteNoise.data;
+        
+        // Карта зон с настраиваемыми порогами
+        const zoneMap = new Uint8Array(TARGET_WIDTH * targetHeight);
+        for (let y = 0; y < targetHeight; y++) {
+            for (let x = 0; x < TARGET_WIDTH; x++) {
+                const idx = (y * TARGET_WIDTH + x) * 4;
+                const lum = 0.299 * videoData[idx] + 0.587 * videoData[idx+1] + 0.114 * videoData[idx+2];
+                let zone;
+                if (lum <= BLACK_MAX) zone = 0;
+                else if (lum <= GRAY_MAX) zone = 1;
+                else zone = 2;
+                zoneMap[y * TARGET_WIDTH + x] = zone;
+            }
+        }
+        
+        // Сглаживание детальности
+        const smoothedDetail = new Float32Array(TARGET_WIDTH * targetHeight);
+        for (let y = 0; y < targetHeight; y++) {
+            for (let x = 0; x < TARGET_WIDTH; x++) {
+                let sum = 0, cnt = 0;
+                for (let dy = -1; dy <= 1; dy++) {
+                    const ny = y + dy;
+                    if (ny < 0 || ny >= targetHeight) continue;
+                    for (let dx = -1; dx <= 1; dx++) {
+                        const nx = x + dx;
+                        if (nx < 0 || nx >= TARGET_WIDTH) continue;
+                        sum += detailMap[ny * TARGET_WIDTH + nx];
+                        cnt++;
+                    }
+                }
+                smoothedDetail[y * TARGET_WIDTH + x] = sum / cnt;
+            }
+        }
+        
+        // Вторжение чёрного в белый
+        const invadedZoneMap = new Uint8Array(TARGET_WIDTH * targetHeight);
+        for (let i = 0; i < zoneMap.length; i++) invadedZoneMap[i] = zoneMap[i];
+        
+        for (let y = 0; y < targetHeight; y += 4) {
+            for (let x = 0; x < TARGET_WIDTH; ) {
+                const detail = smoothedDetail[y * TARGET_WIDTH + x];
+                let stripeLen = 8 + Math.floor(Math.random() * 21);
+                stripeLen = Math.min(stripeLen, TARGET_WIDTH - x);
+                const maxShift = 8 + Math.floor(detail * 16);
+                const shift = Math.floor(Math.random() * (maxShift * 2 + 1)) - maxShift;
+                let srcX = x + shift;
+                srcX = Math.min(Math.max(srcX, 0), TARGET_WIDTH - 1);
+                
+                for (let dy = 0; dy < 4 && (y + dy) < targetHeight; dy++) {
+                    const currentY = y + dy;
+                    const srcIdx = currentY * TARGET_WIDTH + srcX;
+                    const zoneSrc = zoneMap[srcIdx];
+                    const currentZone = zoneMap[currentY * TARGET_WIDTH + x];
+                    if (currentZone === 2 && zoneSrc === 0) {
+                        for (let w = 0; w < stripeLen; w++) {
+                            const nx = x + w;
+                            if (nx >= TARGET_WIDTH) break;
+                            invadedZoneMap[currentY * TARGET_WIDTH + nx] = 0;
+                        }
+                    }
+                }
+                x += stripeLen;
+            }
+        }
+        
+        // Блендинг полосами
+        const outputImage = ctx.createImageData(TARGET_WIDTH, targetHeight);
+        const outputData = outputImage.data;
+        
+        for (let y = 0; y < targetHeight; y += 2) {
+            for (let x = 0; x < TARGET_WIDTH; ) {
+                const detail = smoothedDetail[y * TARGET_WIDTH + x];
+                let stripeLen = 6 + Math.floor(Math.random() * 19);
+                stripeLen = Math.min(stripeLen, TARGET_WIDTH - x);
+                
+                const maxShift = 4 + Math.floor(detail * 16);
+                const shift = Math.floor(Math.random() * (maxShift * 2 + 1)) - maxShift;
+                let srcX = x + shift;
+                srcX = Math.min(Math.max(srcX, 0), TARGET_WIDTH - 1);
+                
+                for (let dy = 0; dy < 2 && (y + dy) < targetHeight; dy++) {
+                    const currentY = y + dy;
+                    const srcIdx = currentY * TARGET_WIDTH + srcX;
+                    const zone = invadedZoneMap[srcIdx];
+                    
+                    for (let w = 0; w < stripeLen; w++) {
+                        const nx = x + w;
+                        if (nx >= TARGET_WIDTH) break;
+                        const pixelIdx = (currentY * TARGET_WIDTH + nx) * 4;
+                        let val;
+                        if (zone === 0) val = blackData[pixelIdx];
+                        else if (zone === 1) val = grayData[pixelIdx];
+                        else val = whiteData[pixelIdx];
+                        
+                        outputData[pixelIdx] = val;
+                        outputData[pixelIdx+1] = val;
+                        outputData[pixelIdx+2] = val;
+                        outputData[pixelIdx+3] = 255;
+                    }
+                }
+                x += stripeLen;
+            }
+        }
+        
+        ctx.putImageData(outputImage, 0, 0);
+        
+        // Пакуем кадр в бинарный формат
+        const packed = packFrame3Gray(zoneMap, TARGET_WIDTH, targetHeight);
+        const b64 = toBase64(packed);
+        frameBuffer.push(b64);
+        
+        frameCountEl.textContent = parseInt(frameCountEl.textContent) + 1;
+        
+        if (frameBuffer.length >= FRAMES_PER_PACKET) {
+            savePacket([...frameBuffer], TARGET_WIDTH, targetHeight);
+            frameBuffer.length = 0;
+        }
+        
+        globalFrame++;
+        if (cameraActive) captureTimeout = setTimeout(processCameraFrame, CAPTURE_INTERVAL);
+    }
+    
+    // ---------- УПРАВЛЕНИЕ КАМЕРОЙ ----------
+    async function startCamera() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } },
+                audio: false
             });
-            const blob = new Blob([fullBuffer], {type: 'application/octet-stream'});
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'stream_stripes.red';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            statusEl.textContent = '✅ Файл .red сохранён';
+            cameraVideo.srcObject = stream;
+            await cameraVideo.play();
+            
+            cameraActive = true;
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+            frameBuffer.length = 0;
+            frameCountEl.textContent = '0';
+            statusDiv.innerHTML = `🔴 LIVE — КАМЕРА · ПОРОГИ: 0-${BLACK_MAX} / ${BLACK_MAX+1}-${GRAY_MAX} / ${GRAY_MAX+1}-255`;
+            
+            globalFrame = 0;
+            const targetH = Math.floor(TARGET_WIDTH * (cameraVideo.videoHeight / cameraVideo.videoWidth));
+            initWhiteNoise(TARGET_WIDTH, targetH);
+            
+            processCameraFrame();
+        } catch(e) {
+            statusDiv.innerHTML = `❌ Ошибка камеры: ${e.message}`;
+        }
+    }
+    
+    function stopCamera() {
+        cameraActive = false;
+        if (captureTimeout) {
+            clearTimeout(captureTimeout);
+            captureTimeout = null;
+        }
+        if (frameBuffer.length > 0) {
+            const targetH = Math.floor(TARGET_WIDTH * (cameraVideo.videoHeight / cameraVideo.videoWidth));
+            savePacket([...frameBuffer], TARGET_WIDTH, targetH);
+            frameBuffer.length = 0;
+        }
+        if (cameraVideo.srcObject) {
+            cameraVideo.srcObject.getTracks().forEach(t => t.stop());
+            cameraVideo.srcObject = null;
+        }
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+        statusDiv.innerHTML = '⏹ Остановлен';
+    }
+    
+    // ---------- ПРИМЕНЕНИЕ ПОРОГОВ ----------
+    function applyThresholds() {
+        BLACK_MAX = parseInt(blackMaxInput.value, 10);
+        GRAY_MAX = parseInt(grayMaxInput.value, 10);
+        if (isNaN(BLACK_MAX)) BLACK_MAX = 86;
+        if (isNaN(GRAY_MAX)) GRAY_MAX = 220;
+        if (BLACK_MAX < 0) BLACK_MAX = 0;
+        if (GRAY_MAX > 255) GRAY_MAX = 255;
+        if (BLACK_MAX >= GRAY_MAX) GRAY_MAX = Math.min(255, BLACK_MAX + 10);
+        blackMaxInput.value = BLACK_MAX;
+        grayMaxInput.value = GRAY_MAX;
+        statusDiv.innerHTML = `⚡ ПОРОГИ: 0-${BLACK_MAX} / ${BLACK_MAX+1}-${GRAY_MAX} / ${GRAY_MAX+1}-255 ⚡`;
+    }
+    
+    // ---------- СОХРАНЕНИЕ И СКАЧИВАНИЕ ----------
+    saveBtn.addEventListener('click', () => {
+        if (allPacketsBinary.length === 0) {
+            statusDiv.innerHTML = 'Нечего сохранять';
+            return;
+        }
+        const totalSize = allPacketsBinary.reduce((acc, buf) => acc + buf.byteLength, 0);
+        const fullBuffer = new Uint8Array(totalSize);
+        let offset = 0;
+        allPacketsBinary.forEach(buf => {
+            fullBuffer.set(new Uint8Array(buf), offset);
+            offset += buf.byteLength;
         });
-
-        clearBtn.addEventListener('click', ()=>{
-            allPacketsBinary = [];
-            document.getElementById('packet-count').textContent='0';
-            document.getElementById('frame-count').textContent='0';
-            document.getElementById('file-size').textContent='—';
-            saveBtn.disabled = true;
-            downloadBtn.disabled = true;
-            localStorage.removeItem(STORAGE_KEY);
-            statusEl.textContent='🗑 Очищено'
+        const blob = new Blob([fullBuffer], {type: 'application/octet-stream'});
+        blob.arrayBuffer().then(ab => {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(new Uint8Array(ab))));
+            statusDiv.innerHTML = `✅ Сохранено в localStorage (${ab.byteLength} байт)`;
         });
-    </script>
+    });
+    
+    downloadBtn.addEventListener('click', () => {
+        if (allPacketsBinary.length === 0) {
+            statusDiv.innerHTML = 'Нечего скачивать';
+            return;
+        }
+        const totalSize = allPacketsBinary.reduce((acc, buf) => acc + buf.byteLength, 0);
+        const fullBuffer = new Uint8Array(totalSize);
+        let offset = 0;
+        allPacketsBinary.forEach(buf => {
+            fullBuffer.set(new Uint8Array(buf), offset);
+            offset += buf.byteLength;
+        });
+        const blob = new Blob([fullBuffer], {type: 'application/octet-stream'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'camera_3gray.red';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        statusDiv.innerHTML = '✅ Файл .red сохранён';
+    });
+    
+    clearBtn.addEventListener('click', () => {
+        allPacketsBinary = [];
+        packetCountEl.textContent = '0';
+        fileSizeEl.textContent = '—';
+        saveBtn.disabled = true;
+        downloadBtn.disabled = true;
+        localStorage.removeItem(STORAGE_KEY);
+        statusDiv.innerHTML = '🗑 Очищено';
+    });
+    
+    startBtn.addEventListener('click', startCamera);
+    stopBtn.addEventListener('click', stopCamera);
+    applyBtn.addEventListener('click', applyThresholds);
+    
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    statusDiv.innerHTML = `⚡ КАМЕРА · 3 ГРАДАЦИИ ⚡<br>ПОРОГИ: 0-${BLACK_MAX} / ${BLACK_MAX+1}-${GRAY_MAX} / ${GRAY_MAX+1}-255`;
+})();
+</script>
 </body>
 </html>
