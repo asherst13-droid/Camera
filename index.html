@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pattern Codec v3 (Skin Tone Fix)</title>
+    <title>v4.0</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -26,7 +26,6 @@
             justify-content: center;
             align-items: center;
             border: 1px solid #333;
-            width: fit-content;
         }
         .control-group {
             display: flex;
@@ -78,56 +77,37 @@
             height: auto;
             image-rendering: pixelated; 
         }
-        .info { margin-top: 5px; font-size: 11px; color: #444; }
     </style>
 </head>
 <body>
 
     <div class="controls">
         <div class="control-group">
-            <label>Изображение</label>
+            <label>Файл</label>
             <input type="file" id="imageInput" accept="image/*">
         </div>
         
         <div class="control-group">
-            <label>Порог: <span id="threshVal">20</span></label>
-            <input type="range" id="threshold" min="5" max="60" value="20">
+            <label>Сила паттерна: <span id="boostVal">40</span></label>
+            <input type="range" id="boost" min="0" max="100" value="40">
         </div>
 
-        <div class="control-group">
-            <label>Контраст узора: <span id="boostVal">60</span></label>
-            <input type="range" id="boost" min="10" max="120" value="60">
-        </div>
-
-        <div class="control-group">
-            <label>Баланс Зелёного: <span id="greenVal">1.0</span></label>
-            <input type="range" id="greenScale" min="0.5" max="1.5" step="0.1" value="1.0">
-        </div>
-
-        <div class="control-group">
-            <label>Сохранение оттенка (Mix): <span id="mixVal">0.25</span></label>
-            <input type="range" id="mixRatio" min="0.0" max="0.5" step="0.05" value="0.25">
-        </div>
-
-        <button id="analyzeBtn">Запустить</button>
+        <button id="analyzeBtn">Старт</button>
     </div>
 
     <div class="canvas-container">
         <div class="canvas-box">
-            <h3>1. Оригинал</h3>
+            <h3>Оригинал</h3>
             <canvas id="originalCanvas"></canvas>
         </div>
         <div class="canvas-box">
-            <h3>2. Закодированный M-канал</h3>
+            <h3>Код</h3>
             <canvas id="encodedCanvas"></canvas>
-            <div class="info">Магента с модуляцией яркости по паттерну.</div>
         </div>
         <div class="canvas-box">
-            <h3>3. Восстановленный RGB</h3>
+            <h3>Декод</h3>
             <canvas id="decodedCanvas"></canvas>
-            <div class="info">R и B восстановлены с сохранением сложных оттенков (Mix).</div>
-        </div>
-    </div>
+        </div</div>
 
     <script>
         const imageInput = document.getElementById('imageInput');
@@ -140,24 +120,11 @@
         const ctxEnc = encodedCanvas.getContext('2d');
         const ctxDec = decodedCanvas.getContext('2d');
 
-        const threshSlider = document.getElementById('threshold');
         const boostSlider = document.getElementById('boost');
-        const greenSlider = document.getElementById('greenScale');
-        const mixSlider = document.getElementById('mixRatio');
-
-        const updateLabels = () => {
-            document.getElementById('threshVal').innerText = threshSlider.value;
+        boostSlider.oninput = () => {
             document.getElementById('boostVal').innerText = boostSlider.value;
-            document.getElementById('greenVal').innerText = parseFloat(greenSlider.value).toFixed(1);
-            document.getElementById('mixVal').innerText = parseFloat(mixSlider.value).toFixed(2);
+            if (sourceImage) analyzeBtn.click();
         };
-
-        [threshSlider, boostSlider, greenSlider, mixSlider].forEach(slider => {
-            slider.oninput = () => {
-                updateLabels();
-                if (sourceImage) analyzeBtn.click();
-            };
-        });
 
         let sourceImage = null;
 
@@ -186,7 +153,6 @@
                     });
 
                     ctxOrig.drawImage(sourceImage, 0, 0, w, h);
-                    updateLabels();
                 };
                 sourceImage.src = event.target.result;
             };
@@ -207,76 +173,67 @@
             const enc = encData.data;
             const dec = decData.data;
 
-            const bIdx = [0, 2, 8, 10]; 
-            const rIdx = [5, 7, 13, 15]; 
+            const mIdx = [0, 2, 5, 7, 8, 10, 13, 15];
+            const gIdx = [1, 3, 4, 6, 9, 11, 12, 14];
+            const rIdx = [5, 7, 13, 15];
+            const bIdx = [0, 2, 8, 10];
             
-            const threshold = parseInt(threshSlider.value);
             const boost = parseInt(boostSlider.value);
-            const gScale = parseFloat(greenSlider.value);
-            const mix = parseFloat(mixSlider.value); // НОВЫЙ ПАРАМЕТР
 
             for (let y = 0; y < h; y += 4) {
                 for (let x = 0; x < w; x += 4) {
-                    let sumR = 0, sumB = 0;
+                    let sumR = 0, sumB = 0, sumG = 0;
 
                     for (let i = 0; i < 16; i++) {
                         const px = x + (i % 4);
                         const py = y + Math.floor(i / 4);
                         const p = (py * w + px) * 4;
                         sumR += src[p];
+                        sumG += src[p + 1];
                         sumB += src[p + 2];
                     }
 
-                    const diff = (sumR / 16) - (sumB / 16);
-                    let isBlue = diff < -threshold;
-                    let isRed = diff > threshold;
+                    const avgR = sumR / 16;
+                    const avgB = sumB / 16;
+                    const avgG = sumG / 16;
 
                     for (let i = 0; i < 16; i++) {
                         const px = x + (i % 4);
                         const py = y + Math.floor(i / 4);
                         const p = (py * w + px) * 4;
 
-                        const rVal = src[p];
-                        const gVal = src[p + 1];
-                        const bVal = src[p + 2];
+                        const origR = src[p];
+                        const origG = src[p + 1];
+                        const origB = src[p + 2];
 
-                        let baseM = Math.max(rVal, bVal);
-                        let encodedM = baseM;
+                        if (mIdx.includes(i)) {
+                            let eR = origR;
+                            let eB = origB;
+                            
+                            if (rIdx.includes(i)) eR = Math.min(255, eR + boost);
+                            if (bIdx.includes(i)) eB = Math.min(255, eB + boost);
 
-                        if (isBlue) {
-                            if (bIdx.includes(i)) encodedM = Math.min(255, baseM + boost);
-                            else if (rIdx.includes(i)) encodedM = Math.max(0, baseM - boost);
+                            enc[p] = eR;
+                            enc[p + 1] = 0;
+                            enc[p + 2] = eB;
+                            enc[p + 3] = 255;
+
+                            dec[p] = eR;
+                            dec[p + 1] = avgG; 
+                            dec[p + 2] = eB;
+                            dec[p + 3] = 255;
                         } 
-                        else if (isRed) {
-                            if (rIdx.includes(i)) encodedM = Math.min(255, baseM + boost);
-                            else if (bIdx.includes(i)) encodedM = Math.max(0, baseM - boost);
+                        else if (gIdx.includes(i)) {
+                            enc[p] = 0;
+                            enc[p + 1] = origG;
+                            enc[p + 2] = 0;
+                            enc[p + 3] = 255;
+
+                            dec[p] = avgR;
+                            dec[p + 1] = origG; 
+                            dec[p + 2] = avgB;
+                            dec[p + 3] = 255;
                         }
-
-                        enc[p] = encodedM;
-                        enc[p + 1] = 0; 
-                        enc[p + 2] = encodedM;
-                        enc[p + 3] = 255;
-
-                        // --- ДЕКОДИРОВАНИЕ С "МЯГКИМ МИКСОМ" ---
-                        let recR = 0, recB = 0, recG = gVal;
-
-                        if (isBlue) {
-                            recB = encodedM;
-                            recR = encodedM * mix; // Оставляем немного красного, чтобы избежать мертвенно-цианового
-                        } else if (isRed) {
-                            recR = encodedM;
-                            recB = encodedM * mix; // ОСТАВЛЯЕМ НЕМНОГО СИНЕГО! Это спасает розовый цвет кожи.
-                        } else {
-                            recR = encodedM;
-                            recB = encodedM; // Истинная маджента/серый
-                        }
-
-                        recG = Math.min(255, Math.max(0, recG * gScale));
-
-                        dec[p] = recR;
-                        dec[p + 1] = recG; 
-                        dec[p + 2] = recB;
-                        dec[p + 3] = 255;
                     }
                 }
             }
