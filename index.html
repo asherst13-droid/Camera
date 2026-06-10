@@ -1,10 +1,9 @@
-
-<!DOCTYPE html>
+  <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pattern Codec v2</title>
+    <title>Pattern Codec v3 (Skin Tone Fix)</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -90,18 +89,23 @@
         </div>
         
         <div class="control-group">
-            <label>Порог (Чувствительность): <span id="threshVal">20</span></label>
+            <label>Порог: <span id="threshVal">20</span></label>
             <input type="range" id="threshold" min="5" max="60" value="20">
         </div>
 
         <div class="control-group">
-            <label>Контраст узора (Boost): <span id="boostVal">60</span></label>
+            <label>Контраст узора: <span id="boostVal">60</span></label>
             <input type="range" id="boost" min="10" max="120" value="60">
         </div>
 
         <div class="control-group">
-            <label>Баланс Зелёного (при декоде): <span id="greenVal">1.0</span></label>
+            <label>Баланс Зелёного: <span id="greenVal">1.0</span></label>
             <input type="range" id="greenScale" min="0.5" max="1.5" step="0.1" value="1.0">
+        </div>
+
+        <div class="control-group">
+            <label>Сохранение оттенка (Mix): <span id="mixVal">0.25</span></label>
+            <input type="range" id="mixRatio" min="0.0" max="0.5" step="0.05" value="0.25">
         </div>
 
         <button id="analyzeBtn">Запустить</button>
@@ -115,12 +119,12 @@
         <div class="canvas-box">
             <h3>2. Закодированный M-канал</h3>
             <canvas id="encodedCanvas"></canvas>
-            <div class="info">Только Магента. Яркость пикселей модулирована паттерном.</div>
+            <div class="info">Магента с модуляцией яркости по паттерну.</div>
         </div>
         <div class="canvas-box">
             <h3>3. Восстановленный RGB</h3>
             <canvas id="decodedCanvas"></canvas>
-            <div class="info">R и B восстановлены по узору. G скорректирован для баланса.</div>
+            <div class="info">R и B восстановлены с сохранением сложных оттенков (Mix).</div>
         </div>
     </div>
 
@@ -138,13 +142,21 @@
         const threshSlider = document.getElementById('threshold');
         const boostSlider = document.getElementById('boost');
         const greenSlider = document.getElementById('greenScale');
+        const mixSlider = document.getElementById('mixRatio');
 
-        threshSlider.oninput = () => document.getElementById('threshVal').innerText = threshSlider.value;
-        boostSlider.oninput = () => document.getElementById('boostVal').innerText = boostSlider.value;
-        greenSlider.oninput = () => {
+        const updateLabels = () => {
+            document.getElementById('threshVal').innerText = threshSlider.value;
+            document.getElementById('boostVal').innerText = boostSlider.value;
             document.getElementById('greenVal').innerText = parseFloat(greenSlider.value).toFixed(1);
-            if (sourceImage) analyzeBtn.click(); // Авто-обновление при движении ползунка
+            document.getElementById('mixVal').innerText = parseFloat(mixSlider.value).toFixed(2);
         };
+
+        [threshSlider, boostSlider, greenSlider, mixSlider].forEach(slider => {
+            slider.oninput = () => {
+                updateLabels();
+                if (sourceImage) analyzeBtn.click();
+            };
+        });
 
         let sourceImage = null;
 
@@ -173,6 +185,7 @@
                     });
 
                     ctxOrig.drawImage(sourceImage, 0, 0, w, h);
+                    updateLabels();
                 };
                 sourceImage.src = event.target.result;
             };
@@ -199,12 +212,12 @@
             const threshold = parseInt(threshSlider.value);
             const boost = parseInt(boostSlider.value);
             const gScale = parseFloat(greenSlider.value);
+            const mix = parseFloat(mixSlider.value); // НОВЫЙ ПАРАМЕТР
 
             for (let y = 0; y < h; y += 4) {
                 for (let x = 0; x < w; x += 4) {
                     let sumR = 0, sumB = 0;
 
-                    // 1. Анализ блока для определения доминанты
                     for (let i = 0; i < 16; i++) {
                         const px = x + (i % 4);
                         const py = y + Math.floor(i / 4);
@@ -217,7 +230,6 @@
                     let isBlue = diff < -threshold;
                     let isRed = diff > threshold;
 
-                    // 2. Обработка пикселей
                     for (let i = 0; i < 16; i++) {
                         const px = x + (i % 4);
                         const py = y + Math.floor(i / 4);
@@ -227,7 +239,6 @@
                         const gVal = src[p + 1];
                         const bVal = src[p + 2];
 
-                        // КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: берем максимум, чтобы сохранить яркость доминирующего цвета
                         let baseM = Math.max(rVal, bVal);
                         let encodedM = baseM;
 
@@ -240,29 +251,25 @@
                             else if (bIdx.includes(i)) encodedM = Math.max(0, baseM - boost);
                         }
 
-                        // Запись в M-канал
                         enc[p] = encodedM;
                         enc[p + 1] = 0; 
                         enc[p + 2] = encodedM;
                         enc[p + 3] = 255;
 
-                        // --- ДЕКОДИРОВАНИЕ ---
+                        // --- ДЕКОДИРОВАНИЕ С "МЯГКИМ МИКСОМ" ---
                         let recR = 0, recB = 0, recG = gVal;
 
                         if (isBlue) {
                             recB = encodedM;
-                            recR = 0; 
+                            recR = encodedM * mix; // Оставляем немного красного, чтобы избежать мертвенно-цианового
                         } else if (isRed) {
                             recR = encodedM;
-                            recB = 0; 
+                            recB = encodedM * mix; // ОСТАВЛЯЕМ НЕМНОГО СИНЕГО! Это спасает розовый цвет кожи.
                         } else {
-                            // Нейтральная зона: делим поровну, чтобы сохранить серый/белый
                             recR = encodedM;
-                            recB = encodedM;
+                            recB = encodedM; // Истинная маджента/серый
                         }
 
-                        // Коррекция зеленого канала для компенсации изменения яркости R и B
-                        // Если мы обнулили один канал, общий светлый тон может сместиться.
                         recG = Math.min(255, Math.max(0, recG * gScale));
 
                         dec[p] = recR;
