@@ -1,12 +1,13 @@
+
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Инструмент анализа</title>
+    <title>Pattern Codec Test</title>
     <style>
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             background-color: #121212;
             color: #e0e0e0;
             padding: 20px;
@@ -16,22 +17,23 @@
         }
         .controls {
             background: #1e1e1e;
-            padding: 20px;
+            padding: 15px 20px;
             border-radius: 8px;
             margin-bottom: 20px;
             display: flex;
-            gap: 24px;
+            gap: 20px;
             flex-wrap: wrap;
             justify-content: center;
             align-items: center;
             border: 1px solid #333;
+            width: fit-content;
         }
         .control-group {
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 5px;
         }
-        label { font-size: 13px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+        label { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
         input[type="file"] {
             padding: 8px;
             background: #2a2a2a;
@@ -40,71 +42,80 @@
             border-radius: 4px;
             cursor: pointer;
         }
+        input[type="range"] { cursor: pointer; }
         button {
-            padding: 10px 24px;
+            padding: 8px 20px;
             background: #333;
             color: white;
             border: 1px solid #555;
             border-radius: 4px;
             font-weight: 500;
             cursor: pointer;
-            transition: 0.2s;
         }
-        button:hover { background: #444; border-color: #777; }
+        button:hover { background: #444; }
         
         .canvas-container {
             display: flex;
-            gap: 20px;
+            gap: 15px;
             flex-wrap: wrap;
             justify-content: center;
+            width: 100%;
         }
         .canvas-box {
             background: #1e1e1e;
-            padding: 15px;
-            border-radius: 8px;
+            padding: 10px;
+            border-radius: 6px;
             text-align: center;
             border: 1px solid #333;
+            flex: 1;
+            min-width: 250px;
         }
-        h3 { margin-top: 0; font-size: 14px; color: #666; font-weight: normal; }
+        h3 { margin: 0 0 10px 0; font-size: 13px; color: #666; font-weight: normal; }
         canvas {
             background: #000;
             border: 1px solid #333;
             max-width: 100%;
             height: auto;
-            image-rendering: pixelated; /* Сохраняет четкость пикселей 1:1 */
+            image-rendering: pixelated; 
         }
-        .info {
-            margin-top: 8px;
-            font-size: 11px;
-            color: #555;
-        }
+        .info { margin-top: 5px; font-size: 11px; color: #444; }
     </style>
 </head>
 <body>
 
     <div class="controls">
         <div class="control-group">
-            <label>Файл</label>
+            <label>Изображение</label>
             <input type="file" id="imageInput" accept="image/*">
         </div>
         
         <div class="control-group">
-            <label>Чувствительность: <span id="threshVal">30</span></label>
-            <input type="range" id="threshold" min="0" max="100" value="30">
+            <label>Порог (Чувствительность): <span id="threshVal">20</span></label>
+            <input type="range" id="threshold" min="5" max="60" value="20">
         </div>
 
-        <button id="analyzeBtn">Обработать</button>
+        <div class="control-group">
+            <label>Контраст узора (Boost): <span id="boostVal">60</span></label>
+            <input type="range" id="boost" min="10" max="120" value="60">
+        </div>
+
+        <button id="analyzeBtn">Запустить</button>
     </div>
 
     <div class="canvas-container">
         <div class="canvas-box">
-            <h3>Оригинал</h3>
+            <h3>1. Оригинал</h3>
             <canvas id="originalCanvas"></canvas>
         </div>
         <div class="canvas-box">
-            <h3>Результат (M-канал, 2 бита)</h3>
-            <canvas id="patternCanvas"></canvas>
-            <div class="info">Размер 1:1. 4 градации яркости (0, 85, 170, 255).</div>
+            <h3>2. Закодированный M-канал</h3>
+            <canvas id="encodedCanvas"></canvas>
+            <div class="info">Только Магента. Яркость пикселей сохранена, но модулирована паттерном.</div>
+        </div>
+        <div class="canvas-box">
+            <h3>3. Восстановленный RGB</h3>
+            <canvas id="decodedCanvas"></canvas>
+            <div class="info">R и B восстановлены алгоритмом по узору. G взят из оригинала.</div>
         </div>
     </div>
 
@@ -112,12 +123,18 @@
         const imageInput = document.getElementById('imageInput');
         const analyzeBtn = document.getElementById('analyzeBtn');
         const originalCanvas = document.getElementById('originalCanvas');
-        const patternCanvas = document.getElementById('patternCanvas');
-        const ctxOrig = originalCanvas.getContext('2d');
-        const ctxPat = patternCanvas.getContext('2d');
+        const encodedCanvas = document.getElementById('encodedCanvas');
+        const decodedCanvas = document.getElementById('decodedCanvas');
         
+        const ctxOrig = originalCanvas.getContext('2d');
+        const ctxEnc = encodedCanvas.getContext('2d');
+        const ctxDec = decodedCanvas.getContext('2d');
+
         const threshSlider = document.getElementById('threshold');
+        const boostSlider = document.getElementById('boost');
+
         threshSlider.oninput = () => document.getElementById('threshVal').innerText = threshSlider.value;
+        boostSlider.oninput = () => document.getElementById('boostVal').innerText = boostSlider.value;
 
         let sourceImage = null;
 
@@ -128,22 +145,25 @@
             reader.onload = (event) => {
                 sourceImage = new Image();
                 sourceImage.onload = () => {
-                    // Ограничиваем максимальный размер для производительности, но сохраняем пропорции
-                    const maxSize = 800; 
+                    // Ограничиваем размер для скорости, но сохраняем пропорции
+                    const maxSize = 600; 
                     let w = sourceImage.width;
                     let h = sourceImage.height;
                     
                     if (w > maxSize || h > maxSize) {
-                        if (w > h) { h = (h / w) * maxSize; w = maxSize; }
-                        else { w = (w / h) * maxSize; h = maxSize; }
+                        const ratio = Math.min(maxSize / w, maxSize / h);
+                        w = Math.floor(w * ratio);
+                        h = Math.floor(h * ratio);
                     }
                     
-                    // Выравниваем по сетке 4x4
+                    // Округляем до кратного 4
                     w = Math.floor(w / 4) * 4;
                     h = Math.floor(h / 4) * 4;
 
-                    originalCanvas.width = w;
-                    originalCanvas.height = h;
+                    [originalCanvas, encodedCanvas, decodedCanvas].forEach(c => {
+                        c.width = w; c.height = h;
+                    });
+
                     ctxOrig.drawImage(sourceImage, 0, 0, w, h);
                 };
                 sourceImage.src = event.target.result;
@@ -152,98 +172,127 @@
         });
 
         analyzeBtn.addEventListener('click', () => {
-            if (!sourceImage) { alert("Загрузите изображение"); return; }
-            
+            if (!sourceImage) return;
+
             const w = originalCanvas.width;
             const h = originalCanvas.height;
-            const imgData = ctxOrig.getImageData(0, 0, w, h);
-            const data = imgData.data;
+            const origData = ctxOrig.getImageData(0, 0, w, h);
+            const src = origData.data;
 
-            // Позиции в блоке 4x4 (0-15)
-            const blueIndices = [0, 2, 8, 10];
-            const redIndices = [5, 7, 13, 15];
-            const allCheckerIndices = [0, 2, 5, 7, 8, 10, 13, 15];
-
-            const threshold = parseInt(threshSlider.value);
+            const encData = ctxEnc.createImageData(w, h);
+            const decData = ctxDec.createImageData(w, h);
             
-            // 4 градации яркости (2 бита)
-            const levels = [0, 85, 170, 255];
+            const enc = encData.data;
+            const dec = decData.data;
 
-            // Канвас результата в оригинальном размере 1:1
-            patternCanvas.width = w;
-            patternCanvas.height = h;
-            const patData = ctxPat.createImageData(w, h);
+            // Индексы внутри блока 4x4 (0-15)
+            // Синяя диагональ/группа
+            const bIdx = [0, 2, 8, 10]; 
+            // Красная диагональ/группа
+            const rIdx = [5, 7, 13, 15]; 
+            
+            const threshold = parseInt(threshSlider.value);
+            const boost = parseInt(boostSlider.value);
 
             for (let y = 0; y < h; y += 4) {
                 for (let x = 0; x < w; x += 4) {
                     let sumR = 0, sumB = 0;
-                    
-                    // 1. Сбор данных блока 4x4
-                    for (let by = 0; by < 4; by++) {
-                        for (let bx = 0; bx < 4; bx++) {
-                            const idx = ((y + by) * w + (x + bx)) * 4;
-                            sumR += data[idx];
-                            sumB += data[idx + 2];
-                        }
-                    }
-                    
-                    const avgR = sumR / 16;
-                    const avgB = sumB / 16;
-                    const diff = avgR - avgB;
-                    
-                    // Базовый уровень яркости маженты (0, 1, 2 или 3)
-                    const magentaIntensity = Math.min(255, avgR + avgB);
-                    let baseLevel = Math.round(magentaIntensity / 85);
-                    baseLevel = Math.max(0, Math.min(3, baseLevel));
 
-                    // 2. Распределение уровней по сетке
-                    const blockLevels = new Array(16).fill(0);
-
-                    if (diff > threshold) { 
-                        // Доминирует красный
-                        redIndices.forEach(i => blockLevels[i] = Math.min(3, baseLevel + 1));
-                        blueIndices.forEach(i => blockLevels[i] = Math.max(0, baseLevel - 1));
-                        // Остальные клетки шахматки остаются на базовом уровне
-                        allCheckerIndices.forEach(i => {
-                            if (!redIndices.includes(i) && !blueIndices.includes(i)) {
-                                blockLevels[i] = baseLevel;
-                            }
-                        });
-                    } 
-                    else if (diff < -threshold) { 
-                        // Доминирует синий
-                        blueIndices.forEach(i => blockLevels[i] = Math.min(3, baseLevel + 1));
-                        redIndices.forEach(i => blockLevels[i] = Math.max(0, baseLevel - 1));
-                        allCheckerIndices.forEach(i => {
-                            if (!redIndices.includes(i) && !blueIndices.includes(i)) {
-                                blockLevels[i] = baseLevel;
-                            }
-                        });
-                    } 
-                    else { 
-                        // Нейтральный участок
-                        allCheckerIndices.forEach(i => blockLevels[i] = baseLevel);
-                    }
-
-                    // 3. Запись результата в канвас 1:1
+                    // 1. Анализируем блок 4x4 для определения доминанты
                     for (let i = 0; i < 16; i++) {
-                        const bx = i % 4;
-                        const by = Math.floor(i / 4);
-                        const px = x + bx;
-                        const py = y + by;
-                        const pIdx = (py * w + px) * 4;
+                        const px = x + (i % 4);
+                        const py = y + Math.floor(i / 4);
+                        const p = (py * w + px) * 4;
+                        sumR += src[p];
+                        sumB += src[p + 2];
+                    }
+
+                    const diff = (sumR / 16) - (sumB / 16);
+                    let isBlue = diff < -threshold;
+                    let isRed = diff > threshold;
+
+                    // 2. Обработка каждого пикселя в блоке
+                    for (let i = 0; i < 16; i++) {
+                        const px = x + (i % 4);
+                        const py = y + Math.floor(i / 4);
+                        const p = (py * w + px) * 4;
+
+                        const rVal = src[p];
+                        const gVal = src[p + 1];
+                        const bVal = src[p + 2];
+
+                        // Базовая яркость мадженты (Luma) для этого конкретного пикселя
+                        // Мы используем среднее от R и B, так как Магента = R + B
+                        let baseM = (rVal + bVal) / 2;
+                        let encodedM = baseM;
+
+                        // Применяем паттерн:
+                        // Если пиксель на "Синей" позиции и блок Синий -> Ярче
+                        // Если пиксель на "Красной" позиции и блок Синий -> Темнее
+                        if (isBlue) {
+                            if (bIdx.includes(i)) encodedM = Math.min(255, baseM + boost);
+                            else if (rIdx.includes(i)) encodedM = Math.max(0, baseM - boost);
+                        } 
+                        else if (isRed) {
+                            if (rIdx.includes(i)) encodedM = Math.min(255, baseM + boost);
+                            else if (bIdx.includes(i)) encodedM = Math.max(0, baseM - boost);
+                        }
+
+                        // Записываем в Encoded (M-канал)
+                        // R и B равны encodedM, G = 0
+                        enc[p] = encodedM;
+                        enc[p + 1] = 0; 
+                        enc[p + 2] = encodedM;
+                        enc[p + 3] = 255;
+
+                        // --- ДЕКОДИРОВАНИЕ ---
+                        // Декодер читает Encoded данные и восстанавливает R и B
                         
-                        const brightness = levels[blockLevels[i]];
+                        // Для простоты декодер пересчитывает средние прямо из Encoded буфера,
+                        // имитируя, что он получил только картинку из окна №2.
+                        let encSumBluePos = 0;
+                        let encSumRedPos = 0;
+
+                        // (В реальном коде это вынеслось бы в отдельный проход, 
+                        // но здесь делаем внутри цикла для наглядности связи)
+                        // Чтобы корректно декодить, нам нужно знать среднее по блоку уже ПОСЛЕ кодирования.
+                        // Но так как мы внутри цикла пикселей, мы можем просто применить логику:
                         
-                        patData.data[pIdx] = brightness;     // R
-                        patData.data[pIdx + 1] = 0;          // G (отключен)
-                        patData.data[pIdx + 2] = brightness; // B
-                        patData.data[pIdx + 3] = 255;        // Alpha
+                        // Мы знаем, что если блок был Синим, то на позициях bIdx яркость была BOOSTed.
+                        // А на rIdx - suppressed.
+                        // Декодер видит: Яркость на bIdx > Яркость на rIdx -> Значит СИНИЙ.
+                        
+                        // Но чтобы записать пиксель прямо сейчас, нам нужно знать решение для всего блока.
+                        // Мы его уже приняли выше (isBlue / isRed).
+                        // Используем это решение для восстановления.
+                        
+                        let recR = 0, recB = 0;
+
+                        if (isBlue) {
+                            // Если блок синий, значит вся яркость мадженты принадлежит Синему каналу
+                            recB = encodedM;
+                            recR = 0; // Или encodedM * 0.1 для мягкости
+                        } else if (isRed) {
+                            // Если блок красный, яркость принадлежит Красному
+                            recR = encodedM;
+                            recB = 0;
+                        } else {
+                            // Если серый/нейтральный - делим пополам
+                            recR = encodedM / 2;
+                            recB = encodedM / 2;
+                        }
+
+                        // Зеленый восстанавливаем из оригинала (так как мы его не трогали в теории)
+                        dec[p] = recR;
+                        dec[p + 1] = gVal; 
+                        dec[p + 2] = recB;
+                        dec[p + 3] = 255;
                     }
                 }
             }
 
-            ctxPat.putImageData(patData, 0, 0);
+            ctxEnc.putImageData(encData, 0, 0);
+            ctxDec.putImageData(decData, 0, 0);
         });
     </script>
 </body>
