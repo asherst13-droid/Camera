@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pattern Codec Test</title>
+    <title>Pattern Codec v2</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -99,6 +99,11 @@
             <input type="range" id="boost" min="10" max="120" value="60">
         </div>
 
+        <div class="control-group">
+            <label>Баланс Зелёного (при декоде): <span id="greenVal">1.0</span></label>
+            <input type="range" id="greenScale" min="0.5" max="1.5" step="0.1" value="1.0">
+        </div>
+
         <button id="analyzeBtn">Запустить</button>
     </div>
 
@@ -110,12 +115,12 @@
         <div class="canvas-box">
             <h3>2. Закодированный M-канал</h3>
             <canvas id="encodedCanvas"></canvas>
-            <div class="info">Только Магента. Яркость пикселей сохранена, но модулирована паттерном.</div>
+            <div class="info">Только Магента. Яркость пикселей модулирована паттерном.</div>
         </div>
         <div class="canvas-box">
             <h3>3. Восстановленный RGB</h3>
             <canvas id="decodedCanvas"></canvas>
-            <div class="info">R и B восстановлены алгоритмом по узору. G взят из оригинала.</div>
+            <div class="info">R и B восстановлены по узору. G скорректирован для баланса.</div>
         </div>
     </div>
 
@@ -132,9 +137,14 @@
 
         const threshSlider = document.getElementById('threshold');
         const boostSlider = document.getElementById('boost');
+        const greenSlider = document.getElementById('greenScale');
 
         threshSlider.oninput = () => document.getElementById('threshVal').innerText = threshSlider.value;
         boostSlider.oninput = () => document.getElementById('boostVal').innerText = boostSlider.value;
+        greenSlider.oninput = () => {
+            document.getElementById('greenVal').innerText = parseFloat(greenSlider.value).toFixed(1);
+            if (sourceImage) analyzeBtn.click(); // Авто-обновление при движении ползунка
+        };
 
         let sourceImage = null;
 
@@ -145,7 +155,6 @@
             reader.onload = (event) => {
                 sourceImage = new Image();
                 sourceImage.onload = () => {
-                    // Ограничиваем размер для скорости, но сохраняем пропорции
                     const maxSize = 600; 
                     let w = sourceImage.width;
                     let h = sourceImage.height;
@@ -156,7 +165,6 @@
                         h = Math.floor(h * ratio);
                     }
                     
-                    // Округляем до кратного 4
                     w = Math.floor(w / 4) * 4;
                     h = Math.floor(h / 4) * 4;
 
@@ -185,20 +193,18 @@
             const enc = encData.data;
             const dec = decData.data;
 
-            // Индексы внутри блока 4x4 (0-15)
-            // Синяя диагональ/группа
             const bIdx = [0, 2, 8, 10]; 
-            // Красная диагональ/группа
             const rIdx = [5, 7, 13, 15]; 
             
             const threshold = parseInt(threshSlider.value);
             const boost = parseInt(boostSlider.value);
+            const gScale = parseFloat(greenSlider.value);
 
             for (let y = 0; y < h; y += 4) {
                 for (let x = 0; x < w; x += 4) {
                     let sumR = 0, sumB = 0;
 
-                    // 1. Анализируем блок 4x4 для определения доминанты
+                    // 1. Анализ блока для определения доминанты
                     for (let i = 0; i < 16; i++) {
                         const px = x + (i % 4);
                         const py = y + Math.floor(i / 4);
@@ -211,7 +217,7 @@
                     let isBlue = diff < -threshold;
                     let isRed = diff > threshold;
 
-                    // 2. Обработка каждого пикселя в блоке
+                    // 2. Обработка пикселей
                     for (let i = 0; i < 16; i++) {
                         const px = x + (i % 4);
                         const py = y + Math.floor(i / 4);
@@ -221,14 +227,10 @@
                         const gVal = src[p + 1];
                         const bVal = src[p + 2];
 
-                        // Базовая яркость мадженты (Luma) для этого конкретного пикселя
-                        // Мы используем среднее от R и B, так как Магента = R + B
-                        let baseM = (rVal + bVal) / 2;
+                        // КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: берем максимум, чтобы сохранить яркость доминирующего цвета
+                        let baseM = Math.max(rVal, bVal);
                         let encodedM = baseM;
 
-                        // Применяем паттерн:
-                        // Если пиксель на "Синей" позиции и блок Синий -> Ярче
-                        // Если пиксель на "Красной" позиции и блок Синий -> Темнее
                         if (isBlue) {
                             if (bIdx.includes(i)) encodedM = Math.min(255, baseM + boost);
                             else if (rIdx.includes(i)) encodedM = Math.max(0, baseM - boost);
@@ -238,53 +240,33 @@
                             else if (bIdx.includes(i)) encodedM = Math.max(0, baseM - boost);
                         }
 
-                        // Записываем в Encoded (M-канал)
-                        // R и B равны encodedM, G = 0
+                        // Запись в M-канал
                         enc[p] = encodedM;
                         enc[p + 1] = 0; 
                         enc[p + 2] = encodedM;
                         enc[p + 3] = 255;
 
                         // --- ДЕКОДИРОВАНИЕ ---
-                        // Декодер читает Encoded данные и восстанавливает R и B
-                        
-                        // Для простоты декодер пересчитывает средние прямо из Encoded буфера,
-                        // имитируя, что он получил только картинку из окна №2.
-                        let encSumBluePos = 0;
-                        let encSumRedPos = 0;
-
-                        // (В реальном коде это вынеслось бы в отдельный проход, 
-                        // но здесь делаем внутри цикла для наглядности связи)
-                        // Чтобы корректно декодить, нам нужно знать среднее по блоку уже ПОСЛЕ кодирования.
-                        // Но так как мы внутри цикла пикселей, мы можем просто применить логику:
-                        
-                        // Мы знаем, что если блок был Синим, то на позициях bIdx яркость была BOOSTed.
-                        // А на rIdx - suppressed.
-                        // Декодер видит: Яркость на bIdx > Яркость на rIdx -> Значит СИНИЙ.
-                        
-                        // Но чтобы записать пиксель прямо сейчас, нам нужно знать решение для всего блока.
-                        // Мы его уже приняли выше (isBlue / isRed).
-                        // Используем это решение для восстановления.
-                        
-                        let recR = 0, recB = 0;
+                        let recR = 0, recB = 0, recG = gVal;
 
                         if (isBlue) {
-                            // Если блок синий, значит вся яркость мадженты принадлежит Синему каналу
                             recB = encodedM;
-                            recR = 0; // Или encodedM * 0.1 для мягкости
+                            recR = 0; 
                         } else if (isRed) {
-                            // Если блок красный, яркость принадлежит Красному
                             recR = encodedM;
-                            recB = 0;
+                            recB = 0; 
                         } else {
-                            // Если серый/нейтральный - делим пополам
-                            recR = encodedM / 2;
-                            recB = encodedM / 2;
+                            // Нейтральная зона: делим поровну, чтобы сохранить серый/белый
+                            recR = encodedM;
+                            recB = encodedM;
                         }
 
-                        // Зеленый восстанавливаем из оригинала (так как мы его не трогали в теории)
+                        // Коррекция зеленого канала для компенсации изменения яркости R и B
+                        // Если мы обнулили один канал, общий светлый тон может сместиться.
+                        recG = Math.min(255, Math.max(0, recG * gScale));
+
                         dec[p] = recR;
-                        dec[p + 1] = gVal; 
+                        dec[p + 1] = recG; 
                         dec[p + 2] = recB;
                         dec[p + 3] = 255;
                     }
