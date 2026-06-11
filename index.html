@@ -1,10 +1,9 @@
-
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>v9.0 (1-Bit Flag)</title>
+    <title>v10.0</title>
     <style>
         body { font-family: sans-serif; background: #121212; color: #e0e0e0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
         .controls { background: #1e1e1e; padding: 15px; border-radius: 8px; margin-bottom: 20px; display: flex; gap: 20px; border: 1px solid #333; }
@@ -28,8 +27,8 @@
             <input type="file" id="imageInput" accept="image/*">
         </div>
         <div class="control-group">
-            <label>Сила разделения (Offset): <span id="offsetVal">60</span></label>
-            <input type="range" id="offset" min="0" max="120" value="60">
+            <label>Пропорция разделения: <span id="ratioVal">0.80</span></label>
+            <input type="range" id="ratio" min="0.50" max="0.95" step="0.05" value="0.80">
         </div>
         <button id="analyzeBtn">Старт</button>
     </div>
@@ -42,10 +41,10 @@
         <div class="canvas-box">
             <h3>Код (M + 1-bit флаг в Alpha)</h3>
             <canvas id="encodedCanvas"></canvas>
-            <div class="info">Alpha = 255 (флаг 1: Red), Alpha = 0 (флаг 0: Blue)</div>
+            <div class="info">Alpha = 255 (Red > Blue), Alpha = 0 (Blue > Red)</div>
         </div>
         <div class="canvas-box">
-            <h3>Декод (Чтение M + Флаг)</h3>
+            <h3>Декод (Распределение энергии 2*M)</h3>
             <canvas id="decodedCanvas"></canvas>
         </div>
     </div>
@@ -60,10 +59,10 @@
         const ctxOrig = originalCanvas.getContext('2d');
         const ctxEnc = encodedCanvas.getContext('2d');
         const ctxDec = decodedCanvas.getContext('2d');
-        const offsetSlider = document.getElementById('offset');
+        const ratioSlider = document.getElementById('ratio');
 
-        offsetSlider.oninput = () => {
-            document.getElementById('offsetVal').innerText = offsetSlider.value;
+        ratioSlider.oninput = () => {
+            document.getElementById('ratioVal').innerText = parseFloat(ratioSlider.value).toFixed(2);
             if (sourceImage) analyzeBtn.click();
         };
 
@@ -98,37 +97,36 @@
             const encData = ctxEnc.createImageData(w, h);
             const decData = ctxDec.createImageData(w, h);
             const enc = encData.data, dec = decData.data;
-            const offset = parseInt(offsetSlider.value);
+            const domRatio = parseFloat(ratioSlider.value);
+            const subRatio = 1.0 - domRatio;
 
             for (let i = 0; i < src.length; i += 4) {
                 const origR = src[i], origG = src[i+1], origB = src[i+2];
                 
                 // 1. КОДИРОВАНИЕ
                 const M = Math.round((origR + origB) / 2);
-                // 1-битный флаг: 1 если красный доминирует, 0 если синий
                 const flag = (origR > origB) ? 1 : 0; 
 
-                // Записываем M в R и B каналы. Флаг прячем в Alpha (в реальном бинарнике это отдельный битовый поток)
                 enc[i] = M;
-                enc[i+1] = origG; // Для наглядности оставим G, чтобы картинка не была черно-белой
+                enc[i+1] = origG; 
                 enc[i+2] = M;
                 enc[i+3] = flag * 255; 
 
-                // 2. ДЕКОДИРОВАНИЕ (Чтение только из enc)
+                // 2. ДЕКОДИРОВАНИЕ (Честное распределение энергии)
                 const decodedM = enc[i];
                 const decodedFlag = enc[i+3] === 255 ? 1 : 0;
                 const decodedG = enc[i+1];
+                
+                // Общая энергия цвета R+B
+                const totalEnergy = decodedM * 2;
 
                 let decR, decB;
-
                 if (decodedFlag === 1) {
-                    // Флаг говорит: "Здесь был сдвиг в красный"
-                    decR = Math.min(255, decodedM + offset);
-                    decB = Math.max(0, decodedM - offset);
+                    decR = Math.round(totalEnergy * domRatio);
+                    decB = Math.round(totalEnergy * subRatio);
                 } else {
-                    // Флаг говорит: "Здесь был сдвиг в синий"
-                    decB = Math.min(255, decodedM + offset);
-                    decR = Math.max(0, decodedM - offset);
+                    decB = Math.round(totalEnergy * domRatio);
+                    decR = Math.round(totalEnergy * subRatio);
                 }
 
                 dec[i] = decR;
