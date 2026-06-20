@@ -1,9 +1,10 @@
+
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Кобальт-Оранж · 1-бит Bayer · RLE · .azure</title>
+    <title>Кобальт-Оранж · 300×300 · Delta RLE</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: #0a0a1a; min-height: 100vh; display: flex; justify-content: center; align-items: center; font-family: 'Courier New', monospace; padding: 20px; }
@@ -38,19 +39,19 @@
             <div class="canvas-wrapper"><canvas id="origCanvas" width="300" height="300"></canvas></div>
         </div>
         <div>
-            <label>КОБАЛЬТ-ОРАНЖ · 1-БИТ</label>
+            <label>КОБАЛЬТ-ОРАНЖ</label>
             <div class="canvas-wrapper"><canvas id="outCanvas" width="300" height="300"></canvas></div>
         </div>
     </div>
 
     <div class="palette">
-        <div class="color-box" style="background:#0033aa" title="Кобальт (тени)"></div>
+        <div class="color-box" style="background:#0033aa" title="Кобальт"></div>
         <span class="palette-label">← ТЕНИ · СВЕТ →</span>
-        <div class="color-box" style="background:#ffaa00" title="Жёлто-оранжевый (свет)"></div>
+        <div class="color-box" style="background:#ffaa00" title="Оранж"></div>
     </div>
 
     <div class="controls">
-        <button id="startBtn">▶ СТАРТ КАМЕРА</button>
+        <button id="startBtn">▶ СТАРТ</button>
         <button id="stopBtn" disabled>⏹ СТОП</button>
     </div>
 
@@ -66,7 +67,7 @@
         <button id="clearBtn">🗑 ОЧИСТИТЬ</button>
     </div>
 
-    <div class="status" id="statusText">⚡ 1-бит Bayer · RLE · 300×300 · ~50 КБ/сек ⚡</div>
+    <div class="status" id="statusText">⚡ 300×300 · Delta RLE · ~50 КБ/сек ⚡</div>
 </div>
 
 <video id="cam" autoplay muted playsinline style="display:none;"></video>
@@ -92,51 +93,73 @@
     const FPS_INTERVAL = 100;
     const FRAMES_PER_PACKET = 10;
 
-    // Два базовых цвета
-    const COBALT = [0, 51, 170];      // Кобальт (тени)
-    const ORANGE = [255, 170, 0];     // Жёлто-оранжевый (свет)
+    const COBALT = [0, 51, 170];
+    const ORANGE = [255, 170, 0];
 
     const BAYER4 = [[0,8,2,10],[12,4,14,6],[3,11,1,9],[15,7,13,5]];
     function bayer(x,y) { return BAYER4[y%4][x%4]/16.0; }
 
-    // 1-бит квантование с Bayer
     function quantize1bit(luminance, x, y) {
         const threshold = bayer(x, y);
         const norm = luminance / 255.0;
         return norm > threshold ? 1 : 0;
     }
 
-    // RLE сжатие 1-битных данных
-    function rleEncode(bits) {
+    // Упаковка 1-битного кадра в байты (300×300 = 90000 бит = 11250 байт)
+    function packBits(bits) {
+        const byteLen = Math.ceil(bits.length / 8);
+        const bytes = new Uint8Array(byteLen);
+        for (let i = 0; i < bits.length; i++) {
+            if (bits[i]) bytes[i >> 3] |= (1 << (7 - (i & 7)));
+        }
+        return bytes;
+    }
+
+    // RLE сжатие упакованных байтов
+    function rleEncode(bytes) {
         const rle = [];
         let i = 0;
-        while (i < bits.length) {
-            const val = bits[i];
+        while (i < bytes.length) {
+            const val = bytes[i];
             let count = 1;
-            while (i + count < bits.length && bits[i + count] === val && count < 65535) count++;
+            while (i + count < bytes.length && bytes[i + count] === val && count < 255) count++;
             rle.push({ val, count });
             i += count;
         }
         return rle;
     }
 
-    // Упаковка RLE в бинарный формат
-    function packFrameRLE(bits) {
-        const rle = rleEncode(bits);
-        // Формат: [4 байта: кол-во записей] + [2 байта на запись]
-        const headerSize = 4;
-        const dataSize = rle.length * 2;
-        const bytes = new Uint8Array(headerSize + dataSize);
-        const view = new DataView(bytes.buffer);
-        view.setUint32(0, rle.length, true);
-        let offset = headerSize;
-        for (const entry of rle) {
-            // 1 бит значение, 15 бит количество
-            const packed = (entry.val << 15) | entry.count;
-            view.setUint16(offset, packed, true);
-            offset += 2;
+    // Delta + RLE: XOR с предыдущим кадром, затем RLE
+    function deltaRLE(currentBytes, prevBytes) {
+        if (!prevBytes) {
+            // Первый кадр — полный RLE
+            const rle = rleEncode(currentBytes);
+            const out = new Uint8Array(1 + rle.length * 2);
+            out[0] = 0xFF; // маркер полного кадра
+            let off = 1;
+            for (const e of rle) {
+                out[off++] = e.val;
+                out[off++] = e.count;
+            }
+            return out.slice(0, off);
         }
-        return bytes;
+        
+        // Delta
+        const delta = new Uint8Array(currentBytes.length);
+        for (let i = 0; i < currentBytes.length; i++) {
+            delta[i] = currentBytes[i] ^ prevBytes[i];
+        }
+        
+        // RLE delta
+        const rle = rleEncode(delta);
+        const out = new Uint8Array(1 + rle.length * 2);
+        out[0] = rle.length & 0xFF; // маркер delta кадра (длина RLE)
+        let off = 1;
+        for (const e of rle) {
+            out[off++] = e.val;
+            out[off++] = e.count;
+        }
+        return out.slice(0, off);
     }
 
     function createPacket(frames) {
@@ -152,6 +175,7 @@
     }
 
     let active = false, timeout = null, frameBuf = [], packets = [], startTime = 0;
+    let prevBytes = null;
 
     function savePacket(frames) {
         createPacket(frames).then(buf => {
@@ -197,7 +221,11 @@
         }
 
         outCtx.putImageData(outImg, 0, 0);
-        frameBuf.push(packFrameRLE(bits));
+        
+        const currentBytes = packBits(bits);
+        frameBuf.push(deltaRLE(currentBytes, prevBytes));
+        prevBytes = currentBytes;
+        
         frameCountEl.textContent = parseInt(frameCountEl.textContent) + 1;
 
         if (frameBuf.length >= FRAMES_PER_PACKET) {
@@ -218,8 +246,9 @@
             active = true;
             startBtn.disabled = true; stopBtn.disabled = false;
             frameBuf.length = 0; frameCountEl.textContent = '0';
+            prevBytes = null;
             startTime = Date.now();
-            statusDiv.innerHTML = '🔴 LIVE · Кобальт-Оранж · 1-бит RLE';
+            statusDiv.innerHTML = '🔴 LIVE · 300×300 · Delta RLE';
             capture();
         } catch(e) { statusDiv.innerHTML = '❌ ' + e.message; }
     }
