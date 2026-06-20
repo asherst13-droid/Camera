@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Кобальт-Оранж · 300×300 · RLE · Хроматический распад</title>
+    <title>Кобальт-Оранж · 300×300 · RLE · Распад v2</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: #0a0a1a; min-height: 100vh; display: flex; justify-content: center; align-items: center; font-family: 'Courier New', monospace; padding: 20px; }
@@ -29,6 +29,7 @@
         .palette { display: flex; gap: 6px; margin-top: 5px; align-items: center; flex-wrap: wrap; justify-content: center; }
         .color-box { width: 28px; height: 28px; border: 1px solid #333; }
         .palette-label { color: #666; font-size: 10px; }
+        .rules { color: #555; font-size: 10px; text-align: center; max-width: 600px; line-height: 1.5; margin-top: 5px; }
     </style>
 </head>
 <body>
@@ -39,7 +40,7 @@
             <div class="canvas-wrapper"><canvas id="origCanvas" width="300" height="300"></canvas></div>
         </div>
         <div>
-            <label>ДВУХСТОРОННИЙ РАСПАД</label>
+            <label>РАСПАД v2 (13 FPS)</label>
             <div class="canvas-wrapper"><canvas id="outCanvas" width="300" height="300"></canvas></div>
         </div>
     </div>
@@ -47,12 +48,13 @@
     <div class="palette">
         <div class="color-box" style="background:#0033aa" title="Кобальт"></div>
         <div class="color-box" style="background:#ffaa00" title="Оранж"></div>
+        <div class="color-box" style="background:#ffe8a0" title="Белый (плотный оранж)"></div>
         <span class="palette-label">|</span>
-        <div class="color-box" style="background:#ff2020" title="Красный (распад оранжа)"></div>
-        <div class="color-box" style="background:#20ff40" title="Зелёный (распад оранжа)"></div>
+        <div class="color-box" style="background:#ff2020" title="Красный (распад)"></div>
+        <div class="color-box" style="background:#20ff40" title="Зелёный (распад)"></div>
         <span class="palette-label">|</span>
-        <div class="color-box" style="background:#20dcf0" title="Циан (распад кобальта)"></div>
-        <div class="color-box" style="background:#dc20dc" title="Маджента (распад кобальта)"></div>
+        <div class="color-box" style="background:#20dcf0" title="Циан (полутон)"></div>
+        <div class="color-box" style="background:#dc20dc" title="Маджента (тень)"></div>
     </div>
 
     <div class="controls">
@@ -72,7 +74,11 @@
         <button id="clearBtn">🗑 ОЧИСТИТЬ</button>
     </div>
 
-    <div class="status" id="statusText">⚡ 300×300 · RLE 3 байта · Двухсторонний хроматический распад ⚡</div>
+    <div class="status" id="statusText">⚡ 300×300 · RLE · 13 FPS · Распад v2 ⚡</div>
+    <div class="rules">
+        🔹 Пиксели распада не соседствуют вплотную (анти-катушки)<br>
+        🔹 Плотный оранж → белый · Циан только в полутонах · Маджента только в тенях
+    </div>
 </div>
 
 <video id="cam" autoplay muted playsinline style="display:none;"></video>
@@ -95,105 +101,159 @@
     const kbPerSecEl = document.getElementById('kbPerSec');
 
     const W = 300, H = 300;
-    const FPS_INTERVAL = 100;
-    const FRAMES_PER_PACKET = 10;
+    const FPS_INTERVAL = 77; // 13 FPS
+    const FRAMES_PER_PACKET = 13;
 
     // Базовые цвета
     const COBALT = [0, 51, 170];
     const ORANGE = [255, 170, 0];
-    // Распад оранжевого (жёлтый = красный + зелёный)
+    const WHITE = [255, 240, 200]; // тёплый белый (плотный оранж)
+    // Распад оранжевого
     const RED = [255, 30, 30];
     const GREEN = [30, 255, 60];
-    // Распад кобальта (синий = циан + маджента)
+    // Распад кобальта
     const CYAN = [30, 220, 240];
     const MAGENTA = [220, 30, 220];
+
+    // Коды цветов для карты
+    const C_COBALT = 0;
+    const C_ORANGE = 1;
+    const C_WHITE = 2;
+    const C_RED = 3;
+    const C_GREEN = 4;
+    const C_CYAN = 5;
+    const C_MAGENTA = 6;
+
+    const PALETTE = {
+        [C_COBALT]: COBALT,
+        [C_ORANGE]: ORANGE,
+        [C_WHITE]: WHITE,
+        [C_RED]: RED,
+        [C_GREEN]: GREEN,
+        [C_CYAN]: CYAN,
+        [C_MAGENTA]: MAGENTA
+    };
 
     const BAYER4 = [[0,8,2,10],[12,4,14,6],[3,11,1,9],[15,7,13,5]];
     function bayer(x,y) { return BAYER4[y%4][x%4]/16.0; }
 
     function quantize1bit(luminance, x, y) {
         const threshold = bayer(x, y);
-        const norm = luminance / 255.0;
-        return norm > threshold ? 1 : 0;
+        return luminance / 255.0 > threshold ? 1 : 0;
     }
 
-    // Детерминированный хеш для стабильного паттерна
     function hash(x, y, frame) {
         let h = (x * 73856093) ^ (y * 19349663) ^ (frame * 83492791);
         h = ((h >> 16) ^ h) * 0x45d9f3b;
         h = ((h >> 16) ^ h) * 0x45d9f3b;
-        h = (h >> 16) ^ h;
-        return h & 0xFF;
+        return ((h >> 16) ^ h) & 0xFF;
     }
 
-    // Подсчёт соседей противоположного цвета (8-связность)
-    function countOppositeNeighbors(bits, x, y, myBit) {
-        let count = 0;
+    // ═══════════════════════════════════════════════════════
+    // СТАТИСТИКА СОСЕДЕЙ
+    // ═══════════════════════════════════════════════════════
+    function getNeighborStats(bits, x, y) {
+        let opposite = 0, same = 0;
+        const myBit = bits[y * W + x];
         for (let dy = -1; dy <= 1; dy++) {
             for (let dx = -1; dx <= 1; dx++) {
                 if (dx === 0 && dy === 0) continue;
                 const nx = x + dx, ny = y + dy;
                 if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue;
-                if (bits[ny * W + nx] !== myBit) count++;
+                if (bits[ny * W + nx] !== myBit) opposite++;
+                else same++;
             }
         }
-        return count;
+        return { opposite, same, total: opposite + same };
     }
 
     // ═══════════════════════════════════════════════════════
-    // АЛГОРИТМ ДВУХСТОРОННЕГО ХРОМАТИЧЕСКОГО РАСПАДА
+    // ПЕРВЫЙ ПРОХОД: определяем желаемый цвет
     // ═══════════════════════════════════════════════════════
     //
-    // Идея: чистые цвета (кобальт/оранж) живут в центре пятен.
-    // На границах пятен (в полутонах) цвет "распадается" на
-    // составляющие — как призма разлагает свет.
+    // ПРАВИЛА:
     //
-    // Для ОРАНЖЕВОГО (жёлтый = R+G):
-    //   - Считаем кобальтовых соседей
-    //   - Если >= 2 соседей → полутон → шанс распада
-    //   - Распад идёт в КРАСНЫЙ или ЗЕЛЁНЫЙ
-    //   - Выбор зависит от Bayer-паттерна (стабильно)
+    // 🔸 ОРАНЖЕВЫЙ ПИКСЕЛЬ (bit=1):
+    //   - Если соседи ВСЕ оранжевые (8/8) → это "плотный свет" → БЕЛЫЙ
+    //     (чем больше оранжевого в паттерне, тем ближе к белому)
+    //   - Если 2-6 кобальтовых соседей → полутон → шанс распада
+    //     в КРАСНЫЙ или ЗЕЛЁНЫЙ (Bayer определяет направление)
     //
-    // Для КОБАЛЬТА (синий = C+M):
-    //   - Считаем оранжевых соседей
-    //   - Если >= 2 соседей → полутон → шанс распада
-    //   - Распад идёт в ЦИАН или МАДЖЕНТУ
-    //   - Выбор зависит от Bayer-паттерна (стабильно)
+    // 🔸 КОБАЛЬТОВЫЙ ПИКСЕЛЬ (bit=0):
+    //   - Если 2-5 оранжевых соседей (≈ равно с синими) → ПОЛУТОН
+    //     → шанс на ЦИАН (только в полутонах, где синий≈оранж)
+    //   - Если 7-8 кобальтовых соседей (глубокая тень) →
+    //     → шанс на МАДЖЕНТУ (только в тенях)
     //
-    // Вероятность распада растёт с количеством соседей:
-    //   - 2 соседа: ~15%
-    //   - 4 соседа: ~25%
-    //   - 8 соседей: ~40%
-    //
-    // Паттерн детерминирован (не мерцает), но слегка
-    // меняется между кадрами (через frame в хеше).
     // ═══════════════════════════════════════════════════════
-    function chooseColor(bits, x, y, frame) {
+    function computeDesiredColor(bits, x, y, frame) {
         const bit = bits[y * W + x];
         const bayerVal = BAYER4[y % 4][x % 4];
         const h = hash(x, y, frame);
+        const { opposite, same } = getNeighborStats(bits, x, y);
         
         if (bit === 1) {
-            // Оранжевый пиксель — проверяем распад в R/G
-            const cobaltN = countOppositeNeighbors(bits, x, y, 1);
-            if (cobaltN >= 2) {
-                const threshold = 10 + cobaltN * 6; // 22..58 из 256
+            // Оранжевый пиксель
+            if (same >= 7) {
+                // Очень плотный свет → тёплый белый
+                if (h < 160) return C_WHITE; // 63% пикселей в плотном свете становятся белыми
+            }
+            if (opposite >= 2 && opposite <= 6) {
+                // Полутон → распад в R/G
+                const threshold = 8 + opposite * 5; // 18..38
                 if (h < threshold) {
-                    return bayerVal < 8 ? RED : GREEN;
+                    return bayerVal < 8 ? C_RED : C_GREEN;
                 }
             }
-            return ORANGE;
+            return C_ORANGE;
         } else {
-            // Кобальтовый пиксель — проверяем распад в C/M
-            const orangeN = countOppositeNeighbors(bits, x, y, 0);
-            if (orangeN >= 2) {
-                const threshold = 10 + orangeN * 6;
-                if (h < threshold) {
-                    return bayerVal < 8 ? CYAN : MAGENTA;
-                }
+            // Кобальтовый пиксель
+            if (opposite >= 2 && opposite <= 5) {
+                // Полутон (синий ≈ оранжевый) → ЦИАН
+                const threshold = 6 + opposite * 4; // 14..26
+                if (h < threshold) return C_CYAN;
             }
-            return COBALT;
+            if (same >= 7) {
+                // Глубокая тень (почти все соседи синие) → МАДЖЕНТА
+                if (h < 35) return C_MAGENTA; // ~14% в тенях
+            }
+            return C_COBALT;
         }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // ВТОРОЙ ПРОХОД: анти-катушки
+    // ═══════════════════════════════════════════════════════
+    //
+    // Пиксели распада (R, G, C, M) не могут находиться
+    // вплотную друг к другу — обязательно 1 базовый
+    // пиксель промежутка. Это убирает "даблы" и "катушки".
+    //
+    // ═══════════════════════════════════════════════════════
+    function isDecayColor(c) {
+        return c === C_RED || c === C_GREEN || c === C_CYAN || c === C_MAGENTA;
+    }
+
+    function hasDecayNeighbor(colorMap, x, y) {
+        for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+                if (dx === 0 && dy === 0) continue;
+                const nx = x + dx, ny = y + dy;
+                if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue;
+                if (isDecayColor(colorMap[ny * W + nx])) return true;
+            }
+        }
+        return false;
+    }
+
+    function applyAntiCoilRule(colorMap, x, y, bits) {
+        const c = colorMap[y * W + x];
+        if (!isDecayColor(c)) return c;
+        // Если рядом есть другой пиксель распада — откатываемся к базовому
+        if (hasDecayNeighbor(colorMap, x, y)) {
+            return bits[y * W + x] === 1 ? C_ORANGE : C_COBALT;
+        }
+        return c;
     }
 
     // RLE: 3 байта на запись [val][count_lo][count_hi]
@@ -258,11 +318,8 @@
         const imgData = origCtx.getImageData(0, 0, W, H);
         const px = imgData.data;
 
+        // 1. Квантование
         const bits = new Uint8Array(W*H);
-        const outImg = outCtx.createImageData(W, H);
-        const out = outImg.data;
-
-        // Сначала квантуем все пиксели
         for (let y = 0; y < H; y++) {
             for (let x = 0; x < W; x++) {
                 const i = (y * W + x) * 4;
@@ -271,18 +328,35 @@
             }
         }
 
-        // Затем рендерим с двухсторонним хроматическим распадом
+        // 2. Карта желаемых цветов (первый проход)
+        const colorMap = new Uint8Array(W*H);
         for (let y = 0; y < H; y++) {
             for (let x = 0; x < W; x++) {
-                const i = (y * W + x) * 4;
-                const [cr, cg, cb] = chooseColor(bits, x, y, globalFrame);
-                out[i] = cr; out[i+1] = cg; out[i+2] = cb; out[i+3] = 255;
+                colorMap[y * W + x] = computeDesiredColor(bits, x, y, globalFrame);
             }
         }
 
+        // 3. Анти-катушки (второй проход)
+        const finalMap = new Uint8Array(W*H);
+        for (let y = 0; y < H; y++) {
+            for (let x = 0; x < W; x++) {
+                finalMap[y * W + x] = applyAntiCoilRule(colorMap, x, y, bits);
+            }
+        }
+
+        // 4. Рендер
+        const outImg = outCtx.createImageData(W, H);
+        const out = outImg.data;
+        for (let y = 0; y < H; y++) {
+            for (let x = 0; x < W; x++) {
+                const i = (y * W + x) * 4;
+                const [cr, cg, cb] = PALETTE[finalMap[y * W + x]];
+                out[i] = cr; out[i+1] = cg; out[i+2] = cb; out[i+3] = 255;
+            }
+        }
         outCtx.putImageData(outImg, 0, 0);
         
-        // В файл пишем только 1-бит (кобальт/оранж), распад — визуальный эффект
+        // 5. В файл — только 1-бит
         frameBuf.push(rleEncode(bits));
         frameCountEl.textContent = parseInt(frameCountEl.textContent) + 1;
         globalFrame++;
@@ -307,7 +381,7 @@
             frameBuf.length = 0; frameCountEl.textContent = '0';
             startTime = Date.now();
             globalFrame = 0;
-            statusDiv.innerHTML = '🔴 LIVE · Двухсторонний распад · RLE';
+            statusDiv.innerHTML = '🔴 LIVE · 13 FPS · Распад v2';
             capture();
         } catch(e) { statusDiv.innerHTML = '❌ ' + e.message; }
     }
@@ -333,7 +407,7 @@
         const blob = new Blob([buf], {type:'application/octet-stream'});
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url; a.download = 'cobalt_orange_chromatic.azure';
+        a.href = url; a.download = 'cobalt_orange_v2.azure';
         document.body.appendChild(a); a.click(); document.body.removeChild(a);
         URL.revokeObjectURL(url);
         statusDiv.innerHTML = '✅ Файл .azure сохранён';
