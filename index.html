@@ -4,19 +4,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Кобальт-Оранж · 300×300 · RLE · Распад v2</title>
+    <title>Green-Magenta Codec · 300×300 · 13 FPS</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: #0a0a1a; min-height: 100vh; display: flex; justify-content: center; align-items: center; font-family: 'Courier New', monospace; padding: 20px; }
         .container { display: flex; flex-direction: column; align-items: center; gap: 15px; max-width: 800px; width: 100%; }
         .canvas-row { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; }
-        .canvas-wrapper { background: #000; border: 2px solid #2a2a4a; }
+        .canvas-wrapper { background: #000; border: 2px solid #2a4a2a; }
         canvas { display: block; image-rendering: crisp-edges; image-rendering: pixelated; width: 300px; height: 300px; }
         label { color: #aaa; font-size: 12px; display: block; margin-bottom: 4px; text-align: center; }
-        button { background: #1a1a3a; border: 1px solid #3a3a6a; color: #ddd; padding: 10px 18px; font-family: monospace; border-radius: 30px; cursor: pointer; font-size: 14px; font-weight: bold; }
-        button:hover:not(:disabled) { background: #4a4a8a; }
+        button { background: #1a3a1a; border: 1px solid #3a6a3a; color: #ddd; padding: 10px 18px; font-family: monospace; border-radius: 30px; cursor: pointer; font-size: 14px; font-weight: bold; }
+        button:hover:not(:disabled) { background: #4a8a4a; }
         button:disabled { opacity: 0.3; cursor: not-allowed; }
-        #startBtn { background: #2a4a6a; border-color: #4a8aaa; }
+        #startBtn { background: #2a6a2a; border-color: #4aaa4a; }
         #stopBtn { background: #4a2a4a; border-color: #8a4a8a; }
         #downloadBtn { background: #4a4a2a; border-color: #8a8a4a; }
         #clearBtn { background: #3a1a2a; border-color: #6a3a4a; }
@@ -25,11 +25,11 @@
         .stats { display: flex; gap: 10px; width: 100%; justify-content: space-around; flex-wrap: wrap; }
         .stat { background: #111; border: 1px solid #333; border-radius: 8px; padding: 8px; text-align: center; flex: 1; min-width: 80px; }
         .stat-label { font-size: 9px; color: #888; text-transform: uppercase; }
-        .stat-value { font-size: 14px; font-weight: bold; color: #ffaa00; }
-        .palette { display: flex; gap: 6px; margin-top: 5px; align-items: center; flex-wrap: wrap; justify-content: center; }
-        .color-box { width: 28px; height: 28px; border: 1px solid #333; }
-        .palette-label { color: #666; font-size: 10px; }
-        .rules { color: #555; font-size: 10px; text-align: center; max-width: 600px; line-height: 1.5; margin-top: 5px; }
+        .stat-value { font-size: 14px; font-weight: bold; color: #00ff88; }
+        .palette { display: flex; gap: 4px; margin-top: 5px; align-items: center; flex-wrap: wrap; justify-content: center; }
+        .color-box { width: 24px; height: 24px; border: 1px solid #333; }
+        .palette-label { color: #666; font-size: 10px; margin: 0 6px; }
+        .info { color: #555; font-size: 10px; text-align: center; max-width: 600px; line-height: 1.5; margin-top: 5px; }
     </style>
 </head>
 <body>
@@ -40,21 +40,18 @@
             <div class="canvas-wrapper"><canvas id="origCanvas" width="300" height="300"></canvas></div>
         </div>
         <div>
-            <label>РАСПАД v2 (13 FPS)</label>
+            <label>G-M КОДЕК (13 FPS)</label>
             <div class="canvas-wrapper"><canvas id="outCanvas" width="300" height="300"></canvas></div>
         </div>
     </div>
 
     <div class="palette">
-        <div class="color-box" style="background:#0044cc" title="Кобальт"></div>
-        <div class="color-box" style="background:#ffcc33" title="Оранж (светлее)"></div>
-        <div class="color-box" style="background:#fff8e0" title="Белый (плавный переход)"></div>
-        <span class="palette-label">|</span>
-        <div class="color-box" style="background:#ff2020" title="Красный (распад)"></div>
-        <div class="color-box" style="background:#20ff40" title="Зелёный (распад)"></div>
-        <span class="palette-label">|</span>
-        <div class="color-box" style="background:#20dcf0" title="Циан (полутон)"></div>
-        <div class="color-box" style="background:#dc20dc" title="Маджента (тень)"></div>
+        <span class="palette-label">Сдвиг маженты:</span>
+        <div class="color-box" style="background:#ffff00" title="0: Жёлтый (M→R)"></div>
+        <div class="color-box" style="background:#ffcc88" title="2"></div>
+        <div class="color-box" style="background:#ffffff" title="5: Белый (нейтрально)"></div>
+        <div class="color-box" style="background:#88ccff" title="7"></div>
+        <div class="color-box" style="background:#00ffff" title="9: Циан (M→B)"></div>
     </div>
 
     <div class="controls">
@@ -70,14 +67,14 @@
     </div>
 
     <div class="controls">
-        <button id="downloadBtn" disabled>📤 СКАЧАТЬ .AZURE</button>
+        <button id="downloadBtn" disabled>📤 СКАЧАТЬ .GM</button>
         <button id="clearBtn">🗑 ОЧИСТИТЬ</button>
     </div>
 
-    <div class="status" id="statusText">⚡ 300×300 · RLE · 13 FPS · Распад v2 ⚡</div>
-    <div class="rules">
-        🔹 Пиксели распада не соседствуют вплотную (анти-катушки)<br>
-        🔹 Плавный переход оранж → белый по концентрации · Циан в полутонах · Маджента в тенях
+    <div class="status" id="statusText">⚡ G-M Codec · 2 байта/пиксель · 13 FPS ⚡</div>
+    <div class="info">
+        G-канал: 4 бита глубины (0-15) · M-канал: 3 бита глубины (0-7) + 4 бита сдвига (0-9)<br>
+        Сдвиг 0-4 → жёлтые оттенки · 5 → белый · 6-9 → циановые оттенки
     </div>
 </div>
 
@@ -104,146 +101,119 @@
     const FPS_INTERVAL = 77;
     const FRAMES_PER_PACKET = 13;
 
-    // Базовые цвета (оранж светлее)
-    const COBALT = [0, 68, 204];
-    const ORANGE = [255, 204, 51]; // светлее, ближе к жёлтому
-    const WHITE = [255, 248, 224]; // тёплый белый
-    // Распад оранжевого
-    const RED = [255, 30, 30];
-    const GREEN = [30, 255, 60];
-    // Распад кобальта
-    const CYAN = [30, 220, 240];
-    const MAGENTA = [220, 30, 220];
-
-    const C_COBALT = 0, C_ORANGE = 1, C_WHITE = 2, C_RED = 3, C_GREEN = 4, C_CYAN = 5, C_MAGENTA = 6;
-
-    const PALETTE = {
-        [C_COBALT]: COBALT, [C_ORANGE]: ORANGE, [C_WHITE]: WHITE,
-        [C_RED]: RED, [C_GREEN]: GREEN, [C_CYAN]: CYAN, [C_MAGENTA]: MAGENTA
-    };
-
+    // Bayer 4×4 для G и M-глубины
     const BAYER4 = [[0,8,2,10],[12,4,14,6],[3,11,1,9],[15,7,13,5]];
     function bayer(x,y) { return BAYER4[y%4][x%4]/16.0; }
 
-    function quantize1bit(luminance, x, y) {
-        return luminance / 255.0 > bayer(x, y) ? 1 : 0;
-    }
-
-    function hash(x, y, frame) {
+    // Blue noise для сдвига (стохастический паттерн)
+    function blueNoise(x, y, frame) {
         let h = (x * 73856093) ^ (y * 19349663) ^ (frame * 83492791);
         h = ((h >> 16) ^ h) * 0x45d9f3b;
         h = ((h >> 16) ^ h) * 0x45d9f3b;
         return ((h >> 16) ^ h) & 0xFF;
     }
 
-    // Концентрация оранжевого в области 5x5
-    function getOrangeConcentration(bits, x, y) {
-        let count = 0, total = 0;
-        for (let dy = -2; dy <= 2; dy++) {
-            for (let dx = -2; dx <= 2; dx++) {
-                const nx = x + dx, ny = y + dy;
-                if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue;
-                if (bits[ny * W + nx] === 1) count++;
-                total++;
-            }
-        }
-        return count / total;
+    // Извлечение G и M из RGB
+    function extractGM(r, g, b) {
+        // Зелёный канал
+        const green = g;
+        // Мажента = R + B (отсутствие зелёного)
+        const magenta = (r + b) / 2;
+        return { green, magenta };
     }
 
-    function getNeighborStats(bits, x, y) {
-        let opposite = 0, same = 0;
-        const myBit = bits[y * W + x];
-        for (let dy = -1; dy <= 1; dy++) {
-            for (let dx = -1; dx <= 1; dx++) {
-                if (dx === 0 && dy === 0) continue;
-                const nx = x + dx, ny = y + dy;
-                if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue;
-                if (bits[ny * W + nx] !== myBit) opposite++;
-                else same++;
-            }
-        }
-        return { opposite, same };
+    // Квантование G (4 бита, 0-15) с Bayer
+    function quantizeG(value, x, y) {
+        const norm = value / 255.0;
+        let level = Math.floor(norm * 16);
+        if (level >= 16) level = 15;
+        const lower = level / 16.0;
+        const upper = (level + 1) / 16.0;
+        const local = (norm - lower) / (upper - lower);
+        if (local > bayer(x, y) && level < 15) level++;
+        return level;
     }
 
-    // Плавная интерполяция цвета
-    function lerpColor(c1, c2, t) {
+    // Квантование M-глубины (3 бита, 0-7) с Bayer
+    function quantizeMDepth(value, x, y) {
+        const norm = value / 255.0;
+        let level = Math.floor(norm * 8);
+        if (level >= 8) level = 7;
+        const lower = level / 8.0;
+        const upper = (level + 1) / 8.0;
+        const local = (norm - lower) / (upper - lower);
+        // Сдвиг матрицы для разнесения с G
+        if (local > bayer(x+2, y+2) && level < 7) level++;
+        return level;
+    }
+
+    // Квантование сдвига (0-9) с blue noise
+    function quantizeShift(r, g, b, x, y, frame) {
+        // Определяем баланс R и B в маженте
+        const magenta = (r + b) / 2;
+        if (magenta < 20) return 5; // нейтрально при слабой маженте
+        
+        // Отношение R к B определяет сдвиг
+        const ratio = r / (r + b + 1); // 0..1
+        // 0 → чистый B (циан) → сдвиг 9
+        // 0.5 → баланс → сдвиг 5
+        // 1 → чистый R (жёлтый) → сдвиг 0
+        
+        let shift = Math.round((1 - ratio) * 9);
+        
+        // Дизеринг через blue noise
+        const noise = blueNoise(x, y, frame) / 255.0;
+        const fractional = ((1 - ratio) * 9) % 1;
+        if (noise < fractional && shift < 9) shift++;
+        
+        return Math.max(0, Math.min(9, shift));
+    }
+
+    // Восстановление цвета из G, M-depth, shift
+    function reconstructColor(gLevel, mLevel, shift) {
+        // G-интенсивность (0-255)
+        const gIntensity = (gLevel / 15) * 255;
+        
+        // M-интенсивность (0-255)
+        const mIntensity = (mLevel / 7) * 255;
+        
+        // Базовый белый = G + M
+        let r = mIntensity;
+        let g = gIntensity;
+        let b = mIntensity;
+        
+        // Сдвиг маженты
+        // 0-4: сдвиг к красному (жёлтые оттенки)
+        // 5: нейтрально (белый)
+        // 6-9: сдвиг к синему (циановые оттенки)
+        
+        if (shift < 5) {
+            // Сдвиг к красному
+            const t = (5 - shift) / 5; // 0..1
+            r = mIntensity * (1 + t);
+            b = mIntensity * (1 - t);
+        } else if (shift > 5) {
+            // Сдвиг к синему
+            const t = (shift - 5) / 4; // 0..1
+            r = mIntensity * (1 - t);
+            b = mIntensity * (1 + t);
+        }
+        
         return [
-            Math.round(c1[0] + (c2[0] - c1[0]) * t),
-            Math.round(c1[1] + (c2[1] - c1[1]) * t),
-            Math.round(c1[2] + (c2[2] - c1[2]) * t)
+            Math.min(255, Math.max(0, Math.round(r))),
+            Math.min(255, Math.max(0, Math.round(g))),
+            Math.min(255, Math.max(0, Math.round(b)))
         ];
     }
 
-    function computeDesiredColor(bits, x, y, frame) {
-        const bit = bits[y * W + x];
-        const bayerVal = BAYER4[y % 4][x % 4];
-        const h = hash(x, y, frame);
-        const { opposite, same } = getNeighborStats(bits, x, y);
-        
-        if (bit === 1) {
-            // Оранжевый пиксель
-            const concentration = getOrangeConcentration(bits, x, y);
-            
-            // Плавный переход к белому по концентрации
-            if (concentration > 0.7) {
-                const t = (concentration - 0.7) / 0.3; // 0..1
-                const blended = lerpColor(ORANGE, WHITE, t);
-                // Используем C_WHITE как маркер, но рендерим с интерполяцией
-                return { code: C_WHITE, blend: t };
-            }
-            
-            // Распад в полутонах
-            if (opposite >= 2 && opposite <= 6) {
-                const threshold = 8 + opposite * 5;
-                if (h < threshold) {
-                    return { code: bayerVal < 8 ? C_RED : C_GREEN, blend: 0 };
-                }
-            }
-            return { code: C_ORANGE, blend: 0 };
-        } else {
-            // Кобальтовый пиксель
-            if (opposite >= 2 && opposite <= 5) {
-                const threshold = 6 + opposite * 4;
-                if (h < threshold) return { code: C_CYAN, blend: 0 };
-            }
-            if (same >= 7) {
-                if (h < 35) return { code: C_MAGENTA, blend: 0 };
-            }
-            return { code: C_COBALT, blend: 0 };
-        }
-    }
-
-    function isDecayColor(c) {
-        return c === C_RED || c === C_GREEN || c === C_CYAN || c === C_MAGENTA;
-    }
-
-    function hasDecayNeighbor(colorMap, x, y) {
-        for (let dy = -1; dy <= 1; dy++) {
-            for (let dx = -1; dx <= 1; dx++) {
-                if (dx === 0 && dy === 0) continue;
-                const nx = x + dx, ny = y + dy;
-                if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue;
-                if (isDecayColor(colorMap[ny * W + nx].code)) return true;
-            }
-        }
-        return false;
-    }
-
-    function applyAntiCoilRule(colorMap, x, y, bits) {
-        const c = colorMap[y * W + x];
-        if (!isDecayColor(c.code)) return c;
-        if (hasDecayNeighbor(colorMap, x, y)) {
-            return { code: bits[y * W + x] === 1 ? C_ORANGE : C_COBALT, blend: 0 };
-        }
-        return c;
-    }
-
-    // Упаковка битов в байты
-    function packBits(bits) {
-        const byteLen = Math.ceil(bits.length / 8);
-        const bytes = new Uint8Array(byteLen);
-        for (let i = 0; i < bits.length; i++) {
-            if (bits[i]) bytes[i >> 3] |= (1 << (7 - (i & 7)));
+    // Упаковка кадра: 2 байта на пиксель
+    // Байт 1: G (4 бита) + M-depth (4 бита, используем 0-7)
+    // Байт 2: shift (4 бита, 0-9) + padding (4 бита)
+    function packFrame(gLevels, mDepths, shifts) {
+        const bytes = new Uint8Array(W * H * 2);
+        for (let i = 0; i < W * H; i++) {
+            bytes[i * 2] = (gLevels[i] << 4) | (mDepths[i] & 0x0F);
+            bytes[i * 2 + 1] = (shifts[i] << 4) | 0x00;
         }
         return bytes;
     }
@@ -270,10 +240,10 @@
 
     function createPacket(frames) {
         const hdr = new DataView(new ArrayBuffer(16));
-        hdr.setUint8(0,'A'.charCodeAt(0));
-        hdr.setUint8(1,'Z'.charCodeAt(0));
-        hdr.setUint8(2,'U'.charCodeAt(0));
-        hdr.setUint8(3,'R'.charCodeAt(0));
+        hdr.setUint8(0,'G'.charCodeAt(0));
+        hdr.setUint8(1,'M'.charCodeAt(0));
+        hdr.setUint8(2,'C'.charCodeAt(0));
+        hdr.setUint8(3,'D'.charCodeAt(0));
         hdr.setUint32(4, frames.length, true);
         hdr.setUint32(8, W, true);
         hdr.setUint32(12, H, true);
@@ -310,47 +280,35 @@
         const imgData = origCtx.getImageData(0, 0, W, H);
         const px = imgData.data;
 
-        const bits = new Uint8Array(W*H);
-        for (let y = 0; y < H; y++) {
-            for (let x = 0; x < W; x++) {
-                const i = (y * W + x) * 4;
-                const lum = 0.299 * px[i] + 0.587 * px[i+1] + 0.114 * px[i+2];
-                bits[y * W + x] = quantize1bit(lum, x, y);
-            }
-        }
-
-        const colorMap = new Array(W*H);
-        for (let y = 0; y < H; y++) {
-            for (let x = 0; x < W; x++) {
-                colorMap[y * W + x] = computeDesiredColor(bits, x, y, globalFrame);
-            }
-        }
-
-        const finalMap = new Array(W*H);
-        for (let y = 0; y < H; y++) {
-            for (let x = 0; x < W; x++) {
-                finalMap[y * W + x] = applyAntiCoilRule(colorMap, x, y, bits);
-            }
-        }
-
+        const gLevels = new Uint8Array(W*H);
+        const mDepths = new Uint8Array(W*H);
+        const shifts = new Uint8Array(W*H);
         const outImg = outCtx.createImageData(W, H);
         const out = outImg.data;
+
         for (let y = 0; y < H; y++) {
             for (let x = 0; x < W; x++) {
                 const i = (y * W + x) * 4;
-                const c = finalMap[y * W + x];
-                let color;
-                if (c.code === C_WHITE) {
-                    color = lerpColor(ORANGE, WHITE, c.blend);
-                } else {
-                    color = PALETTE[c.code];
-                }
-                out[i] = color[0]; out[i+1] = color[1]; out[i+2] = color[2]; out[i+3] = 255;
+                const r = px[i], g = px[i+1], b = px[i+2];
+
+                const { green, magenta } = extractGM(r, g, b);
+                
+                gLevels[y * W + x] = quantizeG(green, x, y);
+                mDepths[y * W + x] = quantizeMDepth(magenta, x, y);
+                shifts[y * W + x] = quantizeShift(r, g, b, x, y, globalFrame);
+
+                const [cr, cg, cb] = reconstructColor(
+                    gLevels[y * W + x],
+                    mDepths[y * W + x],
+                    shifts[y * W + x]
+                );
+                out[i] = cr; out[i+1] = cg; out[i+2] = cb; out[i+3] = 255;
             }
         }
+
         outCtx.putImageData(outImg, 0, 0);
         
-        frameBuf.push(rleEncode(packBits(bits)));
+        frameBuf.push(rleEncode(packFrame(gLevels, mDepths, shifts)));
         frameCountEl.textContent = parseInt(frameCountEl.textContent) + 1;
         globalFrame++;
 
@@ -374,7 +332,7 @@
             frameBuf.length = 0; frameCountEl.textContent = '0';
             startTime = Date.now();
             globalFrame = 0;
-            statusDiv.innerHTML = '🔴 LIVE · 13 FPS · Распад v2';
+            statusDiv.innerHTML = '🔴 LIVE · G-M Codec · 13 FPS';
             capture();
         } catch(e) { statusDiv.innerHTML = '❌ ' + e.message; }
     }
@@ -400,10 +358,10 @@
         const blob = new Blob([buf], {type:'application/octet-stream'});
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url; a.download = 'cobalt_orange_v2.azure';
+        a.href = url; a.download = 'green_magenta.gm';
         document.body.appendChild(a); a.click(); document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        statusDiv.innerHTML = '✅ Файл .azure сохранён';
+        statusDiv.innerHTML = '✅ Файл .gm сохранён';
     };
 
     clearBtn.onclick = () => {
