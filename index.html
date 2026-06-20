@@ -1,1 +1,261 @@
-1
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тепловизор · 2-бит · Сине-Оранжевый</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #0a0a1a; min-height: 100vh; display: flex; justify-content: center; align-items: center; font-family: 'Courier New', monospace; padding: 20px; }
+        .container { display: flex; flex-direction: column; align-items: center; gap: 15px; max-width: 800px; width: 100%; }
+        .canvas-row { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; }
+        .canvas-wrapper { background: #000; border: 2px solid #2a2a4a; }
+        canvas { display: block; image-rendering: crisp-edges; image-rendering: pixelated; width: 300px; height: 300px; }
+        label { color: #aaa; font-size: 12px; display: block; margin-bottom: 4px; text-align: center; }
+        button { background: #1a1a3a; border: 1px solid #3a3a6a; color: #ddd; padding: 10px 18px; font-family: monospace; border-radius: 30px; cursor: pointer; font-size: 14px; font-weight: bold; }
+        button:hover:not(:disabled) { background: #4a4a8a; }
+        button:disabled { opacity: 0.3; cursor: not-allowed; }
+        #startBtn { background: #2a4a6a; border-color: #4a8aaa; }
+        #stopBtn { background: #4a2a4a; border-color: #8a4a8a; }
+        #downloadBtn { background: #4a4a2a; border-color: #8a8a4a; }
+        #clearBtn { background: #3a1a2a; border-color: #6a3a4a; }
+        .status { color: #aaa; font-size: 11px; background: #111; padding: 8px 14px; border-radius: 30px; text-align: center; width: 100%; }
+        .controls { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; width: 100%; }
+        .stats { display: flex; gap: 10px; width: 100%; justify-content: space-around; flex-wrap: wrap; }
+        .stat { background: #111; border: 1px solid #333; border-radius: 8px; padding: 8px; text-align: center; flex: 1; min-width: 80px; }
+        .stat-label { font-size: 9px; color: #888; text-transform: uppercase; }
+        .stat-value { font-size: 14px; font-weight: bold; color: #ff8844; }
+        .palette { display: flex; gap: 4px; margin-top: 5px; align-items: center; }
+        .palette-label { color: #666; font-size: 10px; margin: 0 6px; }
+        .color-box { width: 30px; height: 30px; border: 1px solid #333; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="canvas-row">
+        <div>
+            <label>ОРИГИНАЛ</label>
+            <div class="canvas-wrapper"><canvas id="origCanvas" width="300" height="300"></canvas></div>
+        </div>
+        <div>
+            <label>ТЕПЛОВИЗОР 2-БИТ</label>
+            <div class="canvas-wrapper"><canvas id="outCanvas" width="300" height="300"></canvas></div>
+        </div>
+    </div>
+
+    <div class="palette" id="palette">
+        <span class="palette-label">ХОЛОД</span>
+        <div class="color-box" style="background:#0a1450" title="0: Тень"></div>
+        <div class="color-box" style="background:#2850b4" title="1: Прохлада"></div>
+        <div class="color-box" style="background:#dc9632" title="2: Тепло"></div>
+        <div class="color-box" style="background:#ff6414" title="3: Жар"></div>
+        <span class="palette-label">ЖАР</span>
+    </div>
+
+    <div class="controls">
+        <button id="startBtn">▶ СТАРТ КАМЕРА</button>
+        <button id="stopBtn" disabled>⏹ СТОП</button>
+    </div>
+
+    <div class="stats">
+        <div class="stat"><span class="stat-label">Кадров</span><div class="stat-value" id="frameCount">0</div></div>
+        <div class="stat"><span class="stat-label">Пакетов</span><div class="stat-value" id="packetCount">0</div></div>
+        <div class="stat"><span class="stat-label">Размер</span><div class="stat-value" id="fileSize">—</div></div>
+        <div class="stat"><span class="stat-label">КБ/сек</span><div class="stat-value" id="kbPerSec">—</div></div>
+    </div>
+
+    <div class="controls">
+        <button id="downloadBtn" disabled>📤 СКАЧАТЬ .AZURE</button>
+        <button id="clearBtn">🗑 ОЧИСТИТЬ</button>
+    </div>
+
+    <div class="status" id="statusText">⚡ Тепловизор · 2-бит · 300×300 · ~225 КБ/сек ⚡</div>
+</div>
+
+<video id="cam" autoplay muted playsinline style="display:none;"></video>
+
+<script>
+(function() {
+    const cam = document.getElementById('cam');
+    const origCanvas = document.getElementById('origCanvas');
+    const outCanvas = document.getElementById('outCanvas');
+    const origCtx = origCanvas.getContext('2d');
+    const outCtx = outCanvas.getContext('2d');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const statusDiv = document.getElementById('statusText');
+    const frameCountEl = document.getElementById('frameCount');
+    const packetCountEl = document.getElementById('packetCount');
+    const fileSizeEl = document.getElementById('fileSize');
+    const kbPerSecEl = document.getElementById('kbPerSec');
+
+    const W = 300, H = 300;
+    const FPS_INTERVAL = 100;
+    const FRAMES_PER_PACKET = 10;
+
+    // Тепловизорная палитра: 4 уровня от холода к жару
+    const PALETTE = [
+        [10, 20, 80],     // 0: глубокий синий (тень)
+        [40, 80, 180],    // 1: синий (прохлада)
+        [220, 150, 50],   // 2: жёлто-оранжевый (тепло)
+        [255, 100, 20]    // 3: ярко-оранжевый (жар)
+    ];
+
+    const BAYER4 = [[0,8,2,10],[12,4,14,6],[3,11,1,9],[15,7,13,5]];
+    function bayer(x,y) { return BAYER4[y%4][x%4]/16.0; }
+
+    // 2-бит квантование яркости с Bayer dithering
+    function quantize2bit(luminance, x, y) {
+        const threshold = bayer(x, y);
+        const norm = luminance / 255.0;
+        let level = Math.floor(norm * 4);
+        if (level >= 4) level = 3;
+        const lower = level / 4.0;
+        const upper = (level + 1) / 4.0;
+        const local = (norm - lower) / (upper - lower);
+        if (local > threshold && level < 3) level++;
+        return level;
+    }
+
+    // Упаковка: 2 бита на пиксель, 4 пикселя в байте
+    function packFrame(levels) {
+        const totalPixels = W * H;
+        const byteLen = Math.ceil(totalPixels / 4);
+        const bytes = new Uint8Array(byteLen);
+        for (let i = 0; i < totalPixels; i++) {
+            const byteIdx = i >> 2;
+            const shift = (3 - (i & 3)) * 2;
+            bytes[byteIdx] |= (levels[i] << shift);
+        }
+        return bytes;
+    }
+
+    function createPacket(frames) {
+        const hdr = new DataView(new ArrayBuffer(16));
+        hdr.setUint8(0,'A'.charCodeAt(0));
+        hdr.setUint8(1,'Z'.charCodeAt(0));
+        hdr.setUint8(2,'U'.charCodeAt(0));
+        hdr.setUint8(3,'R'.charCodeAt(0));
+        hdr.setUint32(4, frames.length, true);
+        hdr.setUint32(8, W, true);
+        hdr.setUint32(12, H, true);
+        return new Blob([hdr.buffer, ...frames.map(f => new Blob([f]))]).arrayBuffer();
+    }
+
+    let active = false, timeout = null, frameBuf = [], packets = [], startTime = 0;
+
+    function savePacket(frames) {
+        createPacket(frames).then(buf => {
+            packets.push(buf);
+            packetCountEl.textContent = packets.length;
+            const total = packets.reduce((a,b) => a + b.byteLength, 0);
+            fileSizeEl.textContent = (total/1024).toFixed(1) + ' KB';
+            const elapsed = (Date.now() - startTime) / 1000;
+            kbPerSecEl.textContent = ((total/1024)/elapsed).toFixed(1);
+            statusDiv.innerHTML = `🔴 LIVE — пакет #${packets.length} (${(buf.byteLength/1024).toFixed(1)} KB)`;
+            downloadBtn.disabled = false;
+        });
+    }
+
+    function capture() {
+        if (!active) return;
+        if (cam.readyState < 2) { timeout = setTimeout(capture, FPS_INTERVAL); return; }
+
+        const vw = cam.videoWidth, vh = cam.videoHeight;
+        if (!vw || !vh) { timeout = setTimeout(capture, FPS_INTERVAL); return; }
+
+        const size = Math.min(vw, vh);
+        const ox = (vw - size) / 2, oy = (vh - size) / 2;
+
+        origCtx.drawImage(cam, ox, oy, size, size, 0, 0, W, H);
+        const imgData = origCtx.getImageData(0, 0, W, H);
+        const px = imgData.data;
+
+        const levels = new Uint8Array(W*H);
+        const outImg = outCtx.createImageData(W, H);
+        const out = outImg.data;
+
+        for (let y = 0; y < H; y++) {
+            for (let x = 0; x < W; x++) {
+                const i = (y * W + x) * 4;
+                const lum = 0.299 * px[i] + 0.587 * px[i+1] + 0.114 * px[i+2];
+                const lvl = quantize2bit(lum, x, y);
+                levels[y * W + x] = lvl;
+
+                const [cr,cg,cb] = PALETTE[lvl];
+                out[i] = cr; out[i+1] = cg; out[i+2] = cb; out[i+3] = 255;
+            }
+        }
+
+        outCtx.putImageData(outImg, 0, 0);
+        frameBuf.push(packFrame(levels));
+        frameCountEl.textContent = parseInt(frameCountEl.textContent) + 1;
+
+        if (frameBuf.length >= FRAMES_PER_PACKET) {
+            savePacket([...frameBuf]);
+            frameBuf.length = 0;
+        }
+
+        if (active) timeout = setTimeout(capture, FPS_INTERVAL);
+    }
+
+    async function start() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { width:{ideal:640}, height:{ideal:480}, frameRate:{ideal:30} }, audio: false
+            });
+            cam.srcObject = stream;
+            await cam.play();
+            active = true;
+            startBtn.disabled = true; stopBtn.disabled = false;
+            frameBuf.length = 0; frameCountEl.textContent = '0';
+            startTime = Date.now();
+            statusDiv.innerHTML = '🔴 LIVE · Тепловизор 2-бит';
+            capture();
+        } catch(e) { statusDiv.innerHTML = '❌ ' + e.message; }
+    }
+
+    function stop() {
+        active = false;
+        if (timeout) { clearTimeout(timeout); timeout = null; }
+        if (frameBuf.length) { savePacket([...frameBuf]); frameBuf.length = 0; }
+        if (cam.srcObject) { cam.srcObject.getTracks().forEach(t=>t.stop()); cam.srcObject = null; }
+        startBtn.disabled = false; stopBtn.disabled = true;
+        statusDiv.innerHTML = '⏹ Остановлен';
+    }
+
+    startBtn.onclick = start;
+    stopBtn.onclick = stop;
+
+    downloadBtn.onclick = () => {
+        if (!packets.length) return;
+        const total = packets.reduce((a,b) => a + b.byteLength, 0);
+        const buf = new Uint8Array(total);
+        let off = 0;
+        packets.forEach(p => { buf.set(new Uint8Array(p), off); off += p.byteLength; });
+        const blob = new Blob([buf], {type:'application/octet-stream'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = 'thermal.azure';
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        statusDiv.innerHTML = '✅ Файл .azure сохранён';
+    };
+
+    clearBtn.onclick = () => {
+        packets = [];
+        packetCountEl.textContent = '0';
+        fileSizeEl.textContent = '—';
+        kbPerSecEl.textContent = '—';
+        downloadBtn.disabled = true;
+        statusDiv.innerHTML = '🗑 Очищено';
+    };
+
+    origCtx.fillStyle = '#000'; origCtx.fillRect(0,0,W,H);
+    outCtx.fillStyle = '#000'; outCtx.fillRect(0,0,W,H);
+})();
+</script>
+</body>
+                                                                                                           </html>
