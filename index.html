@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Тепловизор · 2-бит · Сине-Оранжевый</title>
+    <title>Кобальт-Оранж · 1-бит Bayer · RLE · .azure</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: #0a0a1a; min-height: 100vh; display: flex; justify-content: center; align-items: center; font-family: 'Courier New', monospace; padding: 20px; }
@@ -24,10 +24,10 @@
         .stats { display: flex; gap: 10px; width: 100%; justify-content: space-around; flex-wrap: wrap; }
         .stat { background: #111; border: 1px solid #333; border-radius: 8px; padding: 8px; text-align: center; flex: 1; min-width: 80px; }
         .stat-label { font-size: 9px; color: #888; text-transform: uppercase; }
-        .stat-value { font-size: 14px; font-weight: bold; color: #ff8844; }
-        .palette { display: flex; gap: 4px; margin-top: 5px; align-items: center; }
-        .palette-label { color: #666; font-size: 10px; margin: 0 6px; }
-        .color-box { width: 30px; height: 30px; border: 1px solid #333; }
+        .stat-value { font-size: 14px; font-weight: bold; color: #ffaa00; }
+        .palette { display: flex; gap: 10px; margin-top: 5px; align-items: center; }
+        .color-box { width: 40px; height: 40px; border: 1px solid #333; }
+        .palette-label { color: #666; font-size: 10px; }
     </style>
 </head>
 <body>
@@ -38,18 +38,15 @@
             <div class="canvas-wrapper"><canvas id="origCanvas" width="300" height="300"></canvas></div>
         </div>
         <div>
-            <label>ТЕПЛОВИЗОР 2-БИТ</label>
+            <label>КОБАЛЬТ-ОРАНЖ · 1-БИТ</label>
             <div class="canvas-wrapper"><canvas id="outCanvas" width="300" height="300"></canvas></div>
         </div>
     </div>
 
-    <div class="palette" id="palette">
-        <span class="palette-label">ХОЛОД</span>
-        <div class="color-box" style="background:#0a1450" title="0: Тень"></div>
-        <div class="color-box" style="background:#2850b4" title="1: Прохлада"></div>
-        <div class="color-box" style="background:#dc9632" title="2: Тепло"></div>
-        <div class="color-box" style="background:#ff6414" title="3: Жар"></div>
-        <span class="palette-label">ЖАР</span>
+    <div class="palette">
+        <div class="color-box" style="background:#0033aa" title="Кобальт (тени)"></div>
+        <span class="palette-label">← ТЕНИ · СВЕТ →</span>
+        <div class="color-box" style="background:#ffaa00" title="Жёлто-оранжевый (свет)"></div>
     </div>
 
     <div class="controls">
@@ -69,7 +66,7 @@
         <button id="clearBtn">🗑 ОЧИСТИТЬ</button>
     </div>
 
-    <div class="status" id="statusText">⚡ Тепловизор · 2-бит · 300×300 · ~225 КБ/сек ⚡</div>
+    <div class="status" id="statusText">⚡ 1-бит Bayer · RLE · 300×300 · ~50 КБ/сек ⚡</div>
 </div>
 
 <video id="cam" autoplay muted playsinline style="display:none;"></video>
@@ -95,39 +92,49 @@
     const FPS_INTERVAL = 100;
     const FRAMES_PER_PACKET = 10;
 
-    // Тепловизорная палитра: 4 уровня от холода к жару
-    const PALETTE = [
-        [10, 20, 80],     // 0: глубокий синий (тень)
-        [40, 80, 180],    // 1: синий (прохлада)
-        [220, 150, 50],   // 2: жёлто-оранжевый (тепло)
-        [255, 100, 20]    // 3: ярко-оранжевый (жар)
-    ];
+    // Два базовых цвета
+    const COBALT = [0, 51, 170];      // Кобальт (тени)
+    const ORANGE = [255, 170, 0];     // Жёлто-оранжевый (свет)
 
     const BAYER4 = [[0,8,2,10],[12,4,14,6],[3,11,1,9],[15,7,13,5]];
     function bayer(x,y) { return BAYER4[y%4][x%4]/16.0; }
 
-    // 2-бит квантование яркости с Bayer dithering
-    function quantize2bit(luminance, x, y) {
+    // 1-бит квантование с Bayer
+    function quantize1bit(luminance, x, y) {
         const threshold = bayer(x, y);
         const norm = luminance / 255.0;
-        let level = Math.floor(norm * 4);
-        if (level >= 4) level = 3;
-        const lower = level / 4.0;
-        const upper = (level + 1) / 4.0;
-        const local = (norm - lower) / (upper - lower);
-        if (local > threshold && level < 3) level++;
-        return level;
+        return norm > threshold ? 1 : 0;
     }
 
-    // Упаковка: 2 бита на пиксель, 4 пикселя в байте
-    function packFrame(levels) {
-        const totalPixels = W * H;
-        const byteLen = Math.ceil(totalPixels / 4);
-        const bytes = new Uint8Array(byteLen);
-        for (let i = 0; i < totalPixels; i++) {
-            const byteIdx = i >> 2;
-            const shift = (3 - (i & 3)) * 2;
-            bytes[byteIdx] |= (levels[i] << shift);
+    // RLE сжатие 1-битных данных
+    function rleEncode(bits) {
+        const rle = [];
+        let i = 0;
+        while (i < bits.length) {
+            const val = bits[i];
+            let count = 1;
+            while (i + count < bits.length && bits[i + count] === val && count < 65535) count++;
+            rle.push({ val, count });
+            i += count;
+        }
+        return rle;
+    }
+
+    // Упаковка RLE в бинарный формат
+    function packFrameRLE(bits) {
+        const rle = rleEncode(bits);
+        // Формат: [4 байта: кол-во записей] + [2 байта на запись]
+        const headerSize = 4;
+        const dataSize = rle.length * 2;
+        const bytes = new Uint8Array(headerSize + dataSize);
+        const view = new DataView(bytes.buffer);
+        view.setUint32(0, rle.length, true);
+        let offset = headerSize;
+        for (const entry of rle) {
+            // 1 бит значение, 15 бит количество
+            const packed = (entry.val << 15) | entry.count;
+            view.setUint16(offset, packed, true);
+            offset += 2;
         }
         return bytes;
     }
@@ -173,7 +180,7 @@
         const imgData = origCtx.getImageData(0, 0, W, H);
         const px = imgData.data;
 
-        const levels = new Uint8Array(W*H);
+        const bits = new Uint8Array(W*H);
         const outImg = outCtx.createImageData(W, H);
         const out = outImg.data;
 
@@ -181,16 +188,16 @@
             for (let x = 0; x < W; x++) {
                 const i = (y * W + x) * 4;
                 const lum = 0.299 * px[i] + 0.587 * px[i+1] + 0.114 * px[i+2];
-                const lvl = quantize2bit(lum, x, y);
-                levels[y * W + x] = lvl;
+                const bit = quantize1bit(lum, x, y);
+                bits[y * W + x] = bit;
 
-                const [cr,cg,cb] = PALETTE[lvl];
+                const [cr,cg,cb] = bit ? ORANGE : COBALT;
                 out[i] = cr; out[i+1] = cg; out[i+2] = cb; out[i+3] = 255;
             }
         }
 
         outCtx.putImageData(outImg, 0, 0);
-        frameBuf.push(packFrame(levels));
+        frameBuf.push(packFrameRLE(bits));
         frameCountEl.textContent = parseInt(frameCountEl.textContent) + 1;
 
         if (frameBuf.length >= FRAMES_PER_PACKET) {
@@ -212,7 +219,7 @@
             startBtn.disabled = true; stopBtn.disabled = false;
             frameBuf.length = 0; frameCountEl.textContent = '0';
             startTime = Date.now();
-            statusDiv.innerHTML = '🔴 LIVE · Тепловизор 2-бит';
+            statusDiv.innerHTML = '🔴 LIVE · Кобальт-Оранж · 1-бит RLE';
             capture();
         } catch(e) { statusDiv.innerHTML = '❌ ' + e.message; }
     }
@@ -238,7 +245,7 @@
         const blob = new Blob([buf], {type:'application/octet-stream'});
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url; a.download = 'thermal.azure';
+        a.href = url; a.download = 'cobalt_orange.azure';
         document.body.appendChild(a); a.click(); document.body.removeChild(a);
         URL.revokeObjectURL(url);
         statusDiv.innerHTML = '✅ Файл .azure сохранён';
@@ -258,4 +265,4 @@
 })();
 </script>
 </body>
-                                                                                                           </html>
+</html>
