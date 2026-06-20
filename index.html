@@ -46,9 +46,9 @@
     </div>
 
     <div class="palette">
-        <div class="color-box" style="background:#0033aa" title="Кобальт"></div>
-        <div class="color-box" style="background:#ffaa00" title="Оранж"></div>
-        <div class="color-box" style="background:#ffe8a0" title="Белый (плотный оранж)"></div>
+        <div class="color-box" style="background:#0044cc" title="Кобальт"></div>
+        <div class="color-box" style="background:#ffcc33" title="Оранж (светлее)"></div>
+        <div class="color-box" style="background:#fff8e0" title="Белый (плавный переход)"></div>
         <span class="palette-label">|</span>
         <div class="color-box" style="background:#ff2020" title="Красный (распад)"></div>
         <div class="color-box" style="background:#20ff40" title="Зелёный (распад)"></div>
@@ -77,7 +77,7 @@
     <div class="status" id="statusText">⚡ 300×300 · RLE · 13 FPS · Распад v2 ⚡</div>
     <div class="rules">
         🔹 Пиксели распада не соседствуют вплотную (анти-катушки)<br>
-        🔹 Плотный оранж → белый · Циан только в полутонах · Маджента только в тенях
+        🔹 Плавный переход оранж → белый по концентрации · Циан в полутонах · Маджента в тенях
     </div>
 </div>
 
@@ -101,13 +101,13 @@
     const kbPerSecEl = document.getElementById('kbPerSec');
 
     const W = 300, H = 300;
-    const FPS_INTERVAL = 77; // 13 FPS
+    const FPS_INTERVAL = 77;
     const FRAMES_PER_PACKET = 13;
 
-    // Базовые цвета
-    const COBALT = [0, 51, 170];
-    const ORANGE = [255, 170, 0];
-    const WHITE = [255, 240, 200]; // тёплый белый (плотный оранж)
+    // Базовые цвета (оранж светлее)
+    const COBALT = [0, 68, 204];
+    const ORANGE = [255, 204, 51]; // светлее, ближе к жёлтому
+    const WHITE = [255, 248, 224]; // тёплый белый
     // Распад оранжевого
     const RED = [255, 30, 30];
     const GREEN = [30, 255, 60];
@@ -115,31 +115,18 @@
     const CYAN = [30, 220, 240];
     const MAGENTA = [220, 30, 220];
 
-    // Коды цветов для карты
-    const C_COBALT = 0;
-    const C_ORANGE = 1;
-    const C_WHITE = 2;
-    const C_RED = 3;
-    const C_GREEN = 4;
-    const C_CYAN = 5;
-    const C_MAGENTA = 6;
+    const C_COBALT = 0, C_ORANGE = 1, C_WHITE = 2, C_RED = 3, C_GREEN = 4, C_CYAN = 5, C_MAGENTA = 6;
 
     const PALETTE = {
-        [C_COBALT]: COBALT,
-        [C_ORANGE]: ORANGE,
-        [C_WHITE]: WHITE,
-        [C_RED]: RED,
-        [C_GREEN]: GREEN,
-        [C_CYAN]: CYAN,
-        [C_MAGENTA]: MAGENTA
+        [C_COBALT]: COBALT, [C_ORANGE]: ORANGE, [C_WHITE]: WHITE,
+        [C_RED]: RED, [C_GREEN]: GREEN, [C_CYAN]: CYAN, [C_MAGENTA]: MAGENTA
     };
 
     const BAYER4 = [[0,8,2,10],[12,4,14,6],[3,11,1,9],[15,7,13,5]];
     function bayer(x,y) { return BAYER4[y%4][x%4]/16.0; }
 
     function quantize1bit(luminance, x, y) {
-        const threshold = bayer(x, y);
-        return luminance / 255.0 > threshold ? 1 : 0;
+        return luminance / 255.0 > bayer(x, y) ? 1 : 0;
     }
 
     function hash(x, y, frame) {
@@ -149,9 +136,20 @@
         return ((h >> 16) ^ h) & 0xFF;
     }
 
-    // ═══════════════════════════════════════════════════════
-    // СТАТИСТИКА СОСЕДЕЙ
-    // ═══════════════════════════════════════════════════════
+    // Концентрация оранжевого в области 5x5
+    function getOrangeConcentration(bits, x, y) {
+        let count = 0, total = 0;
+        for (let dy = -2; dy <= 2; dy++) {
+            for (let dx = -2; dx <= 2; dx++) {
+                const nx = x + dx, ny = y + dy;
+                if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue;
+                if (bits[ny * W + nx] === 1) count++;
+                total++;
+            }
+        }
+        return count / total;
+    }
+
     function getNeighborStats(bits, x, y) {
         let opposite = 0, same = 0;
         const myBit = bits[y * W + x];
@@ -164,28 +162,18 @@
                 else same++;
             }
         }
-        return { opposite, same, total: opposite + same };
+        return { opposite, same };
     }
 
-    // ═══════════════════════════════════════════════════════
-    // ПЕРВЫЙ ПРОХОД: определяем желаемый цвет
-    // ═══════════════════════════════════════════════════════
-    //
-    // ПРАВИЛА:
-    //
-    // 🔸 ОРАНЖЕВЫЙ ПИКСЕЛЬ (bit=1):
-    //   - Если соседи ВСЕ оранжевые (8/8) → это "плотный свет" → БЕЛЫЙ
-    //     (чем больше оранжевого в паттерне, тем ближе к белому)
-    //   - Если 2-6 кобальтовых соседей → полутон → шанс распада
-    //     в КРАСНЫЙ или ЗЕЛЁНЫЙ (Bayer определяет направление)
-    //
-    // 🔸 КОБАЛЬТОВЫЙ ПИКСЕЛЬ (bit=0):
-    //   - Если 2-5 оранжевых соседей (≈ равно с синими) → ПОЛУТОН
-    //     → шанс на ЦИАН (только в полутонах, где синий≈оранж)
-    //   - Если 7-8 кобальтовых соседей (глубокая тень) →
-    //     → шанс на МАДЖЕНТУ (только в тенях)
-    //
-    // ═══════════════════════════════════════════════════════
+    // Плавная интерполяция цвета
+    function lerpColor(c1, c2, t) {
+        return [
+            Math.round(c1[0] + (c2[0] - c1[0]) * t),
+            Math.round(c1[1] + (c2[1] - c1[1]) * t),
+            Math.round(c1[2] + (c2[2] - c1[2]) * t)
+        ];
+    }
+
     function computeDesiredColor(bits, x, y, frame) {
         const bit = bits[y * W + x];
         const bayerVal = BAYER4[y % 4][x % 4];
@@ -194,42 +182,37 @@
         
         if (bit === 1) {
             // Оранжевый пиксель
-            if (same >= 7) {
-                // Очень плотный свет → тёплый белый
-                if (h < 160) return C_WHITE; // 63% пикселей в плотном свете становятся белыми
+            const concentration = getOrangeConcentration(bits, x, y);
+            
+            // Плавный переход к белому по концентрации
+            if (concentration > 0.7) {
+                const t = (concentration - 0.7) / 0.3; // 0..1
+                const blended = lerpColor(ORANGE, WHITE, t);
+                // Используем C_WHITE как маркер, но рендерим с интерполяцией
+                return { code: C_WHITE, blend: t };
             }
+            
+            // Распад в полутонах
             if (opposite >= 2 && opposite <= 6) {
-                // Полутон → распад в R/G
-                const threshold = 8 + opposite * 5; // 18..38
+                const threshold = 8 + opposite * 5;
                 if (h < threshold) {
-                    return bayerVal < 8 ? C_RED : C_GREEN;
+                    return { code: bayerVal < 8 ? C_RED : C_GREEN, blend: 0 };
                 }
             }
-            return C_ORANGE;
+            return { code: C_ORANGE, blend: 0 };
         } else {
             // Кобальтовый пиксель
             if (opposite >= 2 && opposite <= 5) {
-                // Полутон (синий ≈ оранжевый) → ЦИАН
-                const threshold = 6 + opposite * 4; // 14..26
-                if (h < threshold) return C_CYAN;
+                const threshold = 6 + opposite * 4;
+                if (h < threshold) return { code: C_CYAN, blend: 0 };
             }
             if (same >= 7) {
-                // Глубокая тень (почти все соседи синие) → МАДЖЕНТА
-                if (h < 35) return C_MAGENTA; // ~14% в тенях
+                if (h < 35) return { code: C_MAGENTA, blend: 0 };
             }
-            return C_COBALT;
+            return { code: C_COBALT, blend: 0 };
         }
     }
 
-    // ═══════════════════════════════════════════════════════
-    // ВТОРОЙ ПРОХОД: анти-катушки
-    // ═══════════════════════════════════════════════════════
-    //
-    // Пиксели распада (R, G, C, M) не могут находиться
-    // вплотную друг к другу — обязательно 1 базовый
-    // пиксель промежутка. Это убирает "даблы" и "катушки".
-    //
-    // ═══════════════════════════════════════════════════════
     function isDecayColor(c) {
         return c === C_RED || c === C_GREEN || c === C_CYAN || c === C_MAGENTA;
     }
@@ -240,7 +223,7 @@
                 if (dx === 0 && dy === 0) continue;
                 const nx = x + dx, ny = y + dy;
                 if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue;
-                if (isDecayColor(colorMap[ny * W + nx])) return true;
+                if (isDecayColor(colorMap[ny * W + nx].code)) return true;
             }
         }
         return false;
@@ -248,32 +231,41 @@
 
     function applyAntiCoilRule(colorMap, x, y, bits) {
         const c = colorMap[y * W + x];
-        if (!isDecayColor(c)) return c;
-        // Если рядом есть другой пиксель распада — откатываемся к базовому
+        if (!isDecayColor(c.code)) return c;
         if (hasDecayNeighbor(colorMap, x, y)) {
-            return bits[y * W + x] === 1 ? C_ORANGE : C_COBALT;
+            return { code: bits[y * W + x] === 1 ? C_ORANGE : C_COBALT, blend: 0 };
         }
         return c;
     }
 
-    // RLE: 3 байта на запись [val][count_lo][count_hi]
-    function rleEncode(bits) {
+    // Упаковка битов в байты
+    function packBits(bits) {
+        const byteLen = Math.ceil(bits.length / 8);
+        const bytes = new Uint8Array(byteLen);
+        for (let i = 0; i < bits.length; i++) {
+            if (bits[i]) bytes[i >> 3] |= (1 << (7 - (i & 7)));
+        }
+        return bytes;
+    }
+
+    // RLE по байтам
+    function rleEncode(bytes) {
         const chunks = [];
         let i = 0;
-        while (i < bits.length) {
-            const val = bits[i] ? 0xFF : 0x00;
+        while (i < bytes.length) {
+            const val = bytes[i];
             let count = 1;
-            while (i + count < bits.length && bits[i + count] === bits[i] && count < 65535) count++;
+            while (i + count < bytes.length && bytes[i + count] === val && count < 65535) count++;
             chunks.push({ val, count });
             i += count;
         }
-        const bytes = new Uint8Array(chunks.length * 3);
+        const out = new Uint8Array(chunks.length * 3);
         for (let j = 0; j < chunks.length; j++) {
-            bytes[j * 3] = chunks[j].val;
-            bytes[j * 3 + 1] = chunks[j].count & 0xFF;
-            bytes[j * 3 + 2] = (chunks[j].count >> 8) & 0xFF;
+            out[j * 3] = chunks[j].val;
+            out[j * 3 + 1] = chunks[j].count & 0xFF;
+            out[j * 3 + 2] = (chunks[j].count >> 8) & 0xFF;
         }
-        return bytes;
+        return out;
     }
 
     function createPacket(frames) {
@@ -318,7 +310,6 @@
         const imgData = origCtx.getImageData(0, 0, W, H);
         const px = imgData.data;
 
-        // 1. Квантование
         const bits = new Uint8Array(W*H);
         for (let y = 0; y < H; y++) {
             for (let x = 0; x < W; x++) {
@@ -328,36 +319,38 @@
             }
         }
 
-        // 2. Карта желаемых цветов (первый проход)
-        const colorMap = new Uint8Array(W*H);
+        const colorMap = new Array(W*H);
         for (let y = 0; y < H; y++) {
             for (let x = 0; x < W; x++) {
                 colorMap[y * W + x] = computeDesiredColor(bits, x, y, globalFrame);
             }
         }
 
-        // 3. Анти-катушки (второй проход)
-        const finalMap = new Uint8Array(W*H);
+        const finalMap = new Array(W*H);
         for (let y = 0; y < H; y++) {
             for (let x = 0; x < W; x++) {
                 finalMap[y * W + x] = applyAntiCoilRule(colorMap, x, y, bits);
             }
         }
 
-        // 4. Рендер
         const outImg = outCtx.createImageData(W, H);
         const out = outImg.data;
         for (let y = 0; y < H; y++) {
             for (let x = 0; x < W; x++) {
                 const i = (y * W + x) * 4;
-                const [cr, cg, cb] = PALETTE[finalMap[y * W + x]];
-                out[i] = cr; out[i+1] = cg; out[i+2] = cb; out[i+3] = 255;
+                const c = finalMap[y * W + x];
+                let color;
+                if (c.code === C_WHITE) {
+                    color = lerpColor(ORANGE, WHITE, c.blend);
+                } else {
+                    color = PALETTE[c.code];
+                }
+                out[i] = color[0]; out[i+1] = color[1]; out[i+2] = color[2]; out[i+3] = 255;
             }
         }
         outCtx.putImageData(outImg, 0, 0);
         
-        // 5. В файл — только 1-бит
-        frameBuf.push(rleEncode(bits));
+        frameBuf.push(rleEncode(packBits(bits)));
         frameCountEl.textContent = parseInt(frameCountEl.textContent) + 1;
         globalFrame++;
 
