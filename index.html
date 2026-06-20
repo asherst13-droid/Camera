@@ -1,10 +1,9 @@
-
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Кобальт-Оранж · 300×300 · Delta RLE</title>
+    <title>Кобальт-Оранж · 300×300 · RLE · Хроматический распад</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: #0a0a1a; min-height: 100vh; display: flex; justify-content: center; align-items: center; font-family: 'Courier New', monospace; padding: 20px; }
@@ -26,8 +25,8 @@
         .stat { background: #111; border: 1px solid #333; border-radius: 8px; padding: 8px; text-align: center; flex: 1; min-width: 80px; }
         .stat-label { font-size: 9px; color: #888; text-transform: uppercase; }
         .stat-value { font-size: 14px; font-weight: bold; color: #ffaa00; }
-        .palette { display: flex; gap: 10px; margin-top: 5px; align-items: center; }
-        .color-box { width: 40px; height: 40px; border: 1px solid #333; }
+        .palette { display: flex; gap: 6px; margin-top: 5px; align-items: center; flex-wrap: wrap; justify-content: center; }
+        .color-box { width: 30px; height: 30px; border: 1px solid #333; }
         .palette-label { color: #666; font-size: 10px; }
     </style>
 </head>
@@ -39,15 +38,17 @@
             <div class="canvas-wrapper"><canvas id="origCanvas" width="300" height="300"></canvas></div>
         </div>
         <div>
-            <label>КОБАЛЬТ-ОРАНЖ</label>
+            <label>КОБАЛЬТ-ОРАНЖ + РАСПАД</label>
             <div class="canvas-wrapper"><canvas id="outCanvas" width="300" height="300"></canvas></div>
         </div>
     </div>
 
     <div class="palette">
-        <div class="color-box" style="background:#0033aa" title="Кобальт"></div>
-        <span class="palette-label">← ТЕНИ · СВЕТ →</span>
-        <div class="color-box" style="background:#ffaa00" title="Оранж"></div>
+        <div class="color-box" style="background:#0033aa" title="Кобальт (тени)"></div>
+        <div class="color-box" style="background:#ffaa00" title="Оранж (свет)"></div>
+        <div class="color-box" style="background:#ff0000" title="Красный (распад)"></div>
+        <div class="color-box" style="background:#00ff00" title="Зелёный (распад)"></div>
+        <span class="palette-label">← ТЕНИ · СВЕТ → · Хроматический распад в полутонах</span>
     </div>
 
     <div class="controls">
@@ -67,7 +68,7 @@
         <button id="clearBtn">🗑 ОЧИСТИТЬ</button>
     </div>
 
-    <div class="status" id="statusText">⚡ 300×300 · Delta RLE · ~50 КБ/сек ⚡</div>
+    <div class="status" id="statusText">⚡ 300×300 · RLE 3 байта · Хроматический распад ⚡</div>
 </div>
 
 <video id="cam" autoplay muted playsinline style="display:none;"></video>
@@ -93,8 +94,12 @@
     const FPS_INTERVAL = 100;
     const FRAMES_PER_PACKET = 10;
 
+    // Базовые цвета
     const COBALT = [0, 51, 170];
     const ORANGE = [255, 170, 0];
+    // Цвета распада (чистые составляющие жёлтого)
+    const RED = [255, 20, 20];
+    const GREEN = [20, 255, 40];
 
     const BAYER4 = [[0,8,2,10],[12,4,14,6],[3,11,1,9],[15,7,13,5]];
     function bayer(x,y) { return BAYER4[y%4][x%4]/16.0; }
@@ -105,61 +110,75 @@
         return norm > threshold ? 1 : 0;
     }
 
-    // Упаковка 1-битного кадра в байты (300×300 = 90000 бит = 11250 байт)
-    function packBits(bits) {
-        const byteLen = Math.ceil(bits.length / 8);
-        const bytes = new Uint8Array(byteLen);
-        for (let i = 0; i < bits.length; i++) {
-            if (bits[i]) bytes[i >> 3] |= (1 << (7 - (i & 7)));
-        }
-        return bytes;
+    // Детерминированный хеш для стабильного паттерна распада
+    function hash(x, y, frame) {
+        let h = (x * 73856093) ^ (y * 19349663) ^ (frame * 83492791);
+        h = ((h >> 16) ^ h) * 0x45d9f3b;
+        h = ((h >> 16) ^ h) * 0x45d9f3b;
+        h = (h >> 16) ^ h;
+        return h & 0xFF;
     }
 
-    // RLE сжатие упакованных байтов
-    function rleEncode(bytes) {
-        const rle = [];
+    // Подсчёт кобальтовых соседей (8-связность)
+    function countCobaltNeighbors(bits, x, y) {
+        let count = 0;
+        for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+                if (dx === 0 && dy === 0) continue;
+                const nx = x + dx, ny = y + dy;
+                if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue;
+                if (bits[ny * W + nx] === 0) count++;
+            }
+        }
+        return count;
+    }
+
+    // Выбор цвета с учётом распада в полутонах
+    function chooseColor(bits, x, y, frame) {
+        const bit = bits[y * W + x];
+        if (bit === 0) return COBALT; // кобальт остаётся кобальтом
+        
+        // Для оранжевых точек проверяем, находимся ли в полутоне
+        const cobaltNeighbors = countCobaltNeighbors(bits, x, y);
+        
+        // Чем больше кобальтовых соседей, тем выше шанс распада
+        // Максимум 8 соседей, порог сдвига растёт с их количеством
+        if (cobaltNeighbors >= 2) {
+            const h = hash(x, y, frame);
+            // Вероятность распада: 5-25% в зависимости от количества соседей
+            const threshold = 10 + cobaltNeighbors * 8;
+            if (h < threshold) {
+                // Определяем, в какой цвет распадать (красный или зелёный)
+                // Зависит от позиции в Bayer-паттерне
+                const bayerVal = BAYER4[y % 4][x % 4];
+                if (bayerVal < 8) {
+                    return RED; // красная составляющая
+                } else {
+                    return GREEN; // зелёная составляющая
+                }
+            }
+        }
+        return ORANGE;
+    }
+
+    // RLE: 3 байта на запись [val][count_lo][count_hi]
+    function rleEncode(bits) {
+        const chunks = [];
         let i = 0;
-        while (i < bytes.length) {
-            const val = bytes[i];
+        while (i < bits.length) {
+            const val = bits[i] ? 0xFF : 0x00;
             let count = 1;
-            while (i + count < bytes.length && bytes[i + count] === val && count < 255) count++;
-            rle.push({ val, count });
+            while (i + count < bits.length && bits[i + count] === bits[i] && count < 65535) count++;
+            chunks.push({ val, count });
             i += count;
         }
-        return rle;
-    }
-
-    // Delta + RLE: XOR с предыдущим кадром, затем RLE
-    function deltaRLE(currentBytes, prevBytes) {
-        if (!prevBytes) {
-            // Первый кадр — полный RLE
-            const rle = rleEncode(currentBytes);
-            const out = new Uint8Array(1 + rle.length * 2);
-            out[0] = 0xFF; // маркер полного кадра
-            let off = 1;
-            for (const e of rle) {
-                out[off++] = e.val;
-                out[off++] = e.count;
-            }
-            return out.slice(0, off);
+        const bytes = new Uint8Array(chunks.length * 3);
+        for (let j = 0; j < chunks.length; j++) {
+            bytes[j * 3] = chunks[j].val;
+            bytes[j * 3 + 1] = chunks[j].count & 0xFF;
+            bytes[j * 3 + 2] = (chunks[j].count >> 8) & 0xFF;
         }
-        
-        // Delta
-        const delta = new Uint8Array(currentBytes.length);
-        for (let i = 0; i < currentBytes.length; i++) {
-            delta[i] = currentBytes[i] ^ prevBytes[i];
-        }
-        
-        // RLE delta
-        const rle = rleEncode(delta);
-        const out = new Uint8Array(1 + rle.length * 2);
-        out[0] = rle.length & 0xFF; // маркер delta кадра (длина RLE)
-        let off = 1;
-        for (const e of rle) {
-            out[off++] = e.val;
-            out[off++] = e.count;
-        }
-        return out.slice(0, off);
+        return bytes;
     }
 
     function createPacket(frames) {
@@ -175,7 +194,7 @@
     }
 
     let active = false, timeout = null, frameBuf = [], packets = [], startTime = 0;
-    let prevBytes = null;
+    let globalFrame = 0;
 
     function savePacket(frames) {
         createPacket(frames).then(buf => {
@@ -208,25 +227,30 @@
         const outImg = outCtx.createImageData(W, H);
         const out = outImg.data;
 
+        // Сначала квантуем все пиксели
         for (let y = 0; y < H; y++) {
             for (let x = 0; x < W; x++) {
                 const i = (y * W + x) * 4;
                 const lum = 0.299 * px[i] + 0.587 * px[i+1] + 0.114 * px[i+2];
-                const bit = quantize1bit(lum, x, y);
-                bits[y * W + x] = bit;
+                bits[y * W + x] = quantize1bit(lum, x, y);
+            }
+        }
 
-                const [cr,cg,cb] = bit ? ORANGE : COBALT;
+        // Затем рендерим с хроматическим распадом
+        for (let y = 0; y < H; y++) {
+            for (let x = 0; x < W; x++) {
+                const i = (y * W + x) * 4;
+                const [cr, cg, cb] = chooseColor(bits, x, y, globalFrame);
                 out[i] = cr; out[i+1] = cg; out[i+2] = cb; out[i+3] = 255;
             }
         }
 
         outCtx.putImageData(outImg, 0, 0);
         
-        const currentBytes = packBits(bits);
-        frameBuf.push(deltaRLE(currentBytes, prevBytes));
-        prevBytes = currentBytes;
-        
+        // В файл пишем только 1-бит (кобальт/оранж), распад — чисто визуальный
+        frameBuf.push(rleEncode(bits));
         frameCountEl.textContent = parseInt(frameCountEl.textContent) + 1;
+        globalFrame++;
 
         if (frameBuf.length >= FRAMES_PER_PACKET) {
             savePacket([...frameBuf]);
@@ -246,9 +270,9 @@
             active = true;
             startBtn.disabled = true; stopBtn.disabled = false;
             frameBuf.length = 0; frameCountEl.textContent = '0';
-            prevBytes = null;
             startTime = Date.now();
-            statusDiv.innerHTML = '🔴 LIVE · 300×300 · Delta RLE';
+            globalFrame = 0;
+            statusDiv.innerHTML = '🔴 LIVE · 300×300 · RLE + Хроматический распад';
             capture();
         } catch(e) { statusDiv.innerHTML = '❌ ' + e.message; }
     }
@@ -274,7 +298,7 @@
         const blob = new Blob([buf], {type:'application/octet-stream'});
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url; a.download = 'cobalt_orange.azure';
+        a.href = url; a.download = 'cobalt_orange_chromatic.azure';
         document.body.appendChild(a); a.click(); document.body.removeChild(a);
         URL.revokeObjectURL(url);
         statusDiv.innerHTML = '✅ Файл .azure сохранён';
