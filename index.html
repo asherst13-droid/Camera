@@ -1,1 +1,342 @@
-1
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Стример 3-бит Bayer · 8 каналов · .azure</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #0a0a1a; min-height: 100vh; display: flex; justify-content: center; align-items: center; font-family: 'Courier New', monospace; padding: 20px; }
+        .container { display: flex; flex-direction: column; align-items: center; gap: 15px; max-width: 800px; width: 100%; }
+        .canvas-wrapper { background: #000; border: 2px solid #2a2a4a; }
+        canvas { display: block; width: 360px; height: 360px; image-rendering: crisp-edges; image-rendering: pixelated; }
+        button { background: #1a1a3a; border: 1px solid #3a3a6a; color: #ddd; padding: 10px 18px; font-family: monospace; border-radius: 30px; cursor: pointer; font-size: 14px; font-weight: bold; }
+        button:hover:not(:disabled) { background: #4a4a8a; }
+        button:disabled { opacity: 0.3; cursor: not-allowed; }
+        #startBtn { background: #2a4a6a; border-color: #4a8aaa; }
+        #stopBtn { background: #4a2a4a; border-color: #8a4a8a; }
+        #saveBtn { background: #2a2a6a; border-color: #4a4aaa; }
+        #downloadBtn { background: #4a4a2a; border-color: #8a8a4a; }
+        #clearBtn { background: #3a1a2a; border-color: #6a3a4a; }
+        .status { color: #aaa; font-size: 11px; background: #111; padding: 8px 14px; border-radius: 30px; text-align: center; width: 100%; }
+        .controls { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; width: 100%; }
+        .stats { display: flex; gap: 10px; width: 100%; justify-content: space-around; flex-wrap: wrap; }
+        .stat { background: #111; border: 1px solid #333; border-radius: 8px; padding: 8px; text-align: center; flex: 1; min-width: 100px; }
+        .stat-label { font-size: 9px; color: #888; text-transform: uppercase; }
+        .stat-value { font-size: 14px; font-weight: bold; color: #00aaff; }
+        .info { color: #666; font-size: 10px; text-align: center; margin-top: 10px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="canvas-wrapper">
+        <canvas id="outputCanvas" width="360" height="360"></canvas>
+    </div>
+    <div class="controls">
+        <button id="startBtn">▶ СТАРТ КАМЕРА</button>
+        <button id="stopBtn" disabled>⏹ СТОП</button>
+    </div>
+    <div class="stats">
+        <div class="stat"><span class="stat-label">Кадров</span><div class="stat-value" id="frameCount">0</div></div>
+        <div class="stat"><span class="stat-label">Пакетов</span><div class="stat-value" id="packetCount">0</div></div>
+        <div class="stat"><span class="stat-label">Размер</span><div class="stat-value" id="fileSize">—</div></div>
+        <div class="stat"><span class="stat-label">КБ/сек</span><div class="stat-value" id="kbPerSec">—</div></div>
+    </div>
+    <div class="controls">
+        <button id="saveBtn" disabled>💾 LOCALSTORAGE</button>
+        <button id="downloadBtn" disabled>📤 СКАЧАТЬ .AZURE</button>
+    </div>
+    <div class="controls"><button id="clearBtn">🗑 ОЧИСТИТЬ</button></div>
+    <div class="status" id="statusText">⚡ 3-бит Bayer · 8 каналов (RGB CMY WB) · 360×360 ⚡</div>
+    <div class="info">3 байта на пиксель · 10 FPS · ~3,800 КБ/сек</div>
+</div>
+<video id="cameraVideo" autoplay muted playsinline style="display:none;"></video>
+
+<script>
+(function() {
+    const canvas = document.getElementById('outputCanvas');
+    const ctx = canvas.getContext('2d');
+    const cameraVideo = document.getElementById('cameraVideo');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const saveBtn = document.getElementById('saveBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const statusDiv = document.getElementById('statusText');
+    const frameCountEl = document.getElementById('frameCount');
+    const packetCountEl = document.getElementById('packetCount');
+    const fileSizeEl = document.getElementById('fileSize');
+    const kbPerSecEl = document.getElementById('kbPerSec');
+    
+    const TARGET_WIDTH = 360;
+    const TARGET_HEIGHT = 360;
+    const FRAMES_PER_PACKET = 10;
+    const CAPTURE_INTERVAL = 100;
+    const STORAGE_KEY = 'camera_3bit_bayer_azure';
+    
+    let cameraActive = false;
+    let globalFrame = 0;
+    let captureTimeout = null;
+    let allPacketsBinary = [];
+    let frameBuffer = [];
+    let startTime = 0;
+    
+    // 3-бит Bayer 4×4 (значения 0-15, делим на 2 для 8 уровней)
+    const BAYER4 = [
+        [0, 8, 2, 10],
+        [12, 4, 14, 6],
+        [3, 11, 1, 9],
+        [15, 7, 13, 5]
+    ];
+    
+    function getBayerThreshold(x, y) {
+        return BAYER4[y % 4][x % 4] / 16.0;
+    }
+    
+    // 3-бит квантование (8 уровней: 0-7)
+    function quantize3bit(value, x, y) {
+        const threshold = getBayerThreshold(x, y);
+        const normalized = value / 255.0;
+        let level = Math.floor(normalized * 8);
+        if (level >= 8) level = 7;
+        const lower = level / 8.0;
+        const upper = (level + 1) / 8.0;
+        const norm = (normalized - lower) / (upper - lower);
+        if (norm > threshold && level < 7) level++;
+        return level;
+    }
+    
+    // Упаковка 8 каналов по 3 бита в 3 байта
+    function packPixel(r, g, b, c, m, y, w, bk) {
+        // 24 бита: R(3) G(3) B(3) C(3) M(3) Y(3) W(3) B(3)
+        return (r << 21) | (g << 18) | (b << 15) | (c << 12) | (m << 9) | (y << 6) | (w << 3) | bk;
+    }
+    
+    function captureFrame() {
+        if (!cameraActive) return;
+        if (cameraVideo.readyState < 2) {
+            captureTimeout = setTimeout(captureFrame, CAPTURE_INTERVAL);
+            return;
+        }
+        
+        const vw = cameraVideo.videoWidth;
+        const vh = cameraVideo.videoHeight;
+        if (vw === 0 || vh === 0) {
+            captureTimeout = setTimeout(captureFrame, CAPTURE_INTERVAL);
+            return;
+        }
+        
+        // Обрезка до 360×360 по центру
+        const size = Math.min(vw, vh);
+        const offsetX = (vw - size) / 2;
+        const offsetY = (vh - size) / 2;
+        
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = TARGET_WIDTH;
+        tempCanvas.height = TARGET_HEIGHT;
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.drawImage(cameraVideo, offsetX, offsetY, size, size, 0, 0, TARGET_WIDTH, TARGET_HEIGHT);
+        
+        const imageData = tempCtx.getImageData(0, 0, TARGET_WIDTH, TARGET_HEIGHT);
+        const pixels = imageData.data;
+        
+        // Буфер для кадра: 360×360×3 байта = 388,800 байт
+        const frameBytes = new Uint8Array(TARGET_WIDTH * TARGET_HEIGHT * 3);
+        let byteOffset = 0;
+        
+        for (let y = 0; y < TARGET_HEIGHT; y++) {
+            for (let x = 0; x < TARGET_WIDTH; x++) {
+                const idx = (y * TARGET_WIDTH + x) * 4;
+                const r = pixels[idx];
+                const g = pixels[idx + 1];
+                const b = pixels[idx + 2];
+                
+                // 8 каналов
+                const c = 255 - r;
+                const m = 255 - g;
+                const yel = 255 - b;
+                const w = Math.floor((r + g + b) / 3);
+                const bk = 255 - w;
+                
+                // 3-бит квантование каждого канала
+                const r3 = quantize3bit(r, x, y);
+                const g3 = quantize3bit(g, x, y);
+                const b3 = quantize3bit(b, x, y);
+                const c3 = quantize3bit(c, x, y);
+                const m3 = quantize3bit(m, x, y);
+                const y3 = quantize3bit(yel, x, y);
+                const w3 = quantize3bit(w, x, y);
+                const bk3 = quantize3bit(bk, x, y);
+                
+                // Упаковка в 3 байта
+                const packed = packPixel(r3, g3, b3, c3, m3, y3, w3, bk3);
+                frameBytes[byteOffset] = (packed >> 16) & 0xFF;
+                frameBytes[byteOffset + 1] = (packed >> 8) & 0xFF;
+                frameBytes[byteOffset + 2] = packed & 0xFF;
+                byteOffset += 3;
+            }
+        }
+        
+        // Рендер для превью (упрощённый — показываем только RGB)
+        const outputImage = ctx.createImageData(TARGET_WIDTH, TARGET_HEIGHT);
+        for (let i = 0; i < TARGET_WIDTH * TARGET_HEIGHT; i++) {
+            const idx = i * 4;
+            outputImage.data[idx] = pixels[idx];
+            outputImage.data[idx + 1] = pixels[idx + 1];
+            outputImage.data[idx + 2] = pixels[idx + 2];
+            outputImage.data[idx + 3] = 255;
+        }
+        ctx.putImageData(outputImage, 0, 0);
+        
+        // Добавляем кадр в буфер
+        frameBuffer.push(frameBytes);
+        frameCountEl.textContent = parseInt(frameCountEl.textContent) + 1;
+        
+        if (frameBuffer.length >= FRAMES_PER_PACKET) {
+            savePacket([...frameBuffer]);
+            frameBuffer.length = 0;
+        }
+        
+        globalFrame++;
+        if (cameraActive) captureTimeout = setTimeout(captureFrame, CAPTURE_INTERVAL);
+    }
+    
+    function createBinaryPacket(frames) {
+        const headerView = new DataView(new ArrayBuffer(16));
+        headerView.setUint8(0, 'A'.charCodeAt(0));
+        headerView.setUint8(1, 'Z'.charCodeAt(0));
+        headerView.setUint8(2, 'U'.charCodeAt(0));
+        headerView.setUint8(3, 'R'.charCodeAt(0));
+        headerView.setUint32(4, frames.length, true);
+        headerView.setUint32(8, TARGET_WIDTH, true);
+        headerView.setUint32(12, TARGET_HEIGHT, true);
+        
+        const headerBlob = new Blob([headerView.buffer]);
+        const frameBlobs = frames.map(frameData => new Blob([frameData]));
+        const packetBlob = new Blob([headerBlob, ...frameBlobs]);
+        return packetBlob.arrayBuffer();
+    }
+    
+    function savePacket(frames) {
+        if (frames.length === 0) return;
+        createBinaryPacket(frames).then(buffer => {
+            allPacketsBinary.push(buffer);
+            packetCountEl.textContent = allPacketsBinary.length;
+            const totalSize = allPacketsBinary.reduce((acc, buf) => acc + buf.byteLength, 0);
+            fileSizeEl.textContent = (totalSize / 1024).toFixed(1) + ' KB';
+            
+            const elapsed = (Date.now() - startTime) / 1000;
+            const kbPerSec = (totalSize / 1024) / elapsed;
+            kbPerSecEl.textContent = kbPerSec.toFixed(1);
+            
+            statusDiv.innerHTML = `🔴 LIVE — пакет #${allPacketsBinary.length} (${(buffer.byteLength / 1024).toFixed(1)} KB)`;
+            saveBtn.disabled = false;
+            downloadBtn.disabled = false;
+        });
+    }
+    
+    async function startCamera() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } },
+                audio: false
+            });
+            cameraVideo.srcObject = stream;
+            await cameraVideo.play();
+            cameraActive = true;
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+            frameBuffer.length = 0;
+            frameCountEl.textContent = '0';
+            startTime = Date.now();
+            statusDiv.innerHTML = `🔴 LIVE · 3-бит Bayer · 8 каналов`;
+            globalFrame = 0;
+            captureFrame();
+        } catch(e) {
+            statusDiv.innerHTML = `❌ Ошибка камеры: ${e.message}`;
+        }
+    }
+    
+    function stopCamera() {
+        cameraActive = false;
+        if (captureTimeout) {
+            clearTimeout(captureTimeout);
+            captureTimeout = null;
+        }
+        if (frameBuffer.length > 0) {
+            savePacket([...frameBuffer]);
+            frameBuffer.length = 0;
+        }
+        if (cameraVideo.srcObject) {
+            cameraVideo.srcObject.getTracks().forEach(t => t.stop());
+            cameraVideo.srcObject = null;
+        }
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+        statusDiv.innerHTML = '⏹ Остановлен';
+    }
+    
+    saveBtn.addEventListener('click', () => {
+        if (allPacketsBinary.length === 0) {
+            statusDiv.innerHTML = 'Нечего сохранять';
+            return;
+        }
+        const totalSize = allPacketsBinary.reduce((acc, buf) => acc + buf.byteLength, 0);
+        const fullBuffer = new Uint8Array(totalSize);
+        let offset = 0;
+        allPacketsBinary.forEach(buf => {
+            fullBuffer.set(new Uint8Array(buf), offset);
+            offset += buf.byteLength;
+        });
+        const blob = new Blob([fullBuffer], {type: 'application/octet-stream'});
+        blob.arrayBuffer().then(ab => {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(new Uint8Array(ab))));
+            statusDiv.innerHTML = `✅ Сохранено (${ab.byteLength} байт)`;
+        });
+    });
+    
+    downloadBtn.addEventListener('click', () => {
+        if (allPacketsBinary.length === 0) {
+            statusDiv.innerHTML = 'Нечего скачивать';
+            return;
+        }
+        const totalSize = allPacketsBinary.reduce((acc, buf) => acc + buf.byteLength, 0);
+        const fullBuffer = new Uint8Array(totalSize);
+        let offset = 0;
+        allPacketsBinary.forEach(buf => {
+            fullBuffer.set(new Uint8Array(buf), offset);
+            offset += buf.byteLength;
+        });
+        const blob = new Blob([fullBuffer], {type: 'application/octet-stream'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'camera_3bit_bayer.azure';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        statusDiv.innerHTML = '✅ Файл .azure сохранён';
+    });
+    
+    clearBtn.addEventListener('click', () => {
+        allPacketsBinary = [];
+        packetCountEl.textContent = '0';
+        fileSizeEl.textContent = '—';
+        kbPerSecEl.textContent = '—';
+        saveBtn.disabled = true;
+        downloadBtn.disabled = true;
+        localStorage.removeItem(STORAGE_KEY);
+        statusDiv.innerHTML = '🗑 Очищено';
+    });
+    
+    startBtn.addEventListener('click', startCamera);
+    stopBtn.addEventListener('click', stopCamera);
+    
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    statusDiv.innerHTML = `⚡ 3-бит Bayer · 8 каналов · 360×360 ⚡`;
+})();
+</script>
+</body>
+  </html>
